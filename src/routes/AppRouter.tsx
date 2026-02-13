@@ -1,17 +1,17 @@
-import { Route, Routes } from 'react-router-dom'
-import { ProtectedRoute } from '../auth/ProtectedRoute'
-import { AppShell } from '../components/AppShell'
-import { AdminUsers } from '../pages/AdminUsers'
-import { AdminPermissions } from '../pages/AdminPermissions'
-import { Dashboard } from '../pages/Dashboard'
-import { Login } from '../pages/Login'
-import { NotFound } from '../pages/NotFound'
-import { OrganizationsList } from '../pages/OrganizationsList'
-import { OrganizationEdit } from '../pages/OrganizationEdit'
-import { ContactsList } from '../pages/ContactsList'
-import { ContactEdit } from '../pages/ContactEdit'
-import { DeliveriesList } from '../pages/DeliveriesList'
-import { DeliveryEdit } from '../pages/DeliveryEdit'
+import { Route, Routes } from "react-router-dom";
+import { ProtectedRoute } from "../auth/ProtectedRoute";
+import { AppShell } from "../components/AppShell";
+import { AdminUsers } from "../pages/AdminUsers";
+import { AdminPermissions } from "../pages/AdminPermissions";
+import { Dashboard } from "../pages/Dashboard";
+import { Login } from "../pages/Login";
+import { NotFound } from "../pages/NotFound";
+import { OrganizationsList } from "../pages/OrganizationsList";
+import { OrganizationEdit } from "../pages/OrganizationEdit";
+import { ContactsList } from "../pages/ContactsList";
+import { ContactEdit } from "../pages/ContactEdit";
+import { DeliveriesList } from "../pages/DeliveriesList";
+import { DeliveryEdit } from "../pages/DeliveryEdit";
 
 export function AppRouter() {
   return (
@@ -24,7 +24,14 @@ export function AppRouter() {
           <Route
             path="/contacts"
             element={
-              <ProtectedRoute allowedRoles={['admin', 'contacts_manager', 'delivery_coordinator', 'view_only']} />
+              <ProtectedRoute
+                allowedRoles={[
+                  "admin",
+                  "contacts_manager",
+                  "delivery_coordinator",
+                  "view_only",
+                ]}
+              />
             }
           >
             <Route index element={<ContactsList />} />
@@ -34,7 +41,16 @@ export function AppRouter() {
 
           <Route
             path="/organizations"
-            element={<ProtectedRoute allowedRoles={['admin', 'contacts_manager', 'delivery_coordinator', 'view_only']} />}
+            element={
+              <ProtectedRoute
+                allowedRoles={[
+                  "admin",
+                  "contacts_manager",
+                  "delivery_coordinator",
+                  "view_only",
+                ]}
+              />
+            }
           >
             <Route index element={<OrganizationsList />} />
             <Route path=":id" element={<OrganizationEdit />} />
@@ -43,14 +59,26 @@ export function AppRouter() {
 
           <Route
             path="/deliveries"
-            element={<ProtectedRoute allowedRoles={['admin', 'contacts_manager', 'delivery_coordinator', 'view_only']} />}
+            element={
+              <ProtectedRoute
+                allowedRoles={[
+                  "admin",
+                  "contacts_manager",
+                  "delivery_coordinator",
+                  "view_only",
+                ]}
+              />
+            }
           >
             <Route index element={<DeliveriesList />} />
             <Route path=":id" element={<DeliveryEdit />} />
             <Route path="new" element={<DeliveryEdit />} />
           </Route>
 
-          <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']} />}>
+          <Route
+            path="/admin"
+            element={<ProtectedRoute allowedRoles={["admin"]} />}
+          >
             <Route path="users" element={<AdminUsers />} />
             <Route path="permissions" element={<AdminPermissions />} />
           </Route>
@@ -59,5 +87,5 @@ export function AppRouter() {
 
       <Route path="*" element={<NotFound />} />
     </Routes>
-  )
+  );
 }

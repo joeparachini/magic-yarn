@@ -412,7 +412,9 @@ export function OrganizationEdit() {
                     {associatedContacts.length} total
                   </div>
                   {canEdit ? (
-                    <Link to={`/contacts/new?organizationId=${encodeURIComponent(id)}`}>
+                    <Link
+                      to={`/contacts/new?organizationId=${encodeURIComponent(id)}`}
+                    >
                       <Button size="sm">New contact</Button>
                     </Link>
                   ) : null}

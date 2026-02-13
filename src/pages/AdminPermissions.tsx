@@ -1,118 +1,170 @@
-import { useEffect, useMemo, useState } from 'react'
-import type { Role } from '../auth/types'
-import { Button } from '../components/ui/button'
-import { supabase } from '../lib/supabaseClient'
+import { useEffect, useMemo, useState } from "react";
+import type { Role } from "../auth/types";
+import { Button } from "../components/ui/button";
+import { supabase } from "../lib/supabaseClient";
 
 type AppPermission =
-  | 'organizations.read'
-  | 'organizations.write'
-  | 'organizations.delete'
-  | 'contacts.read'
-  | 'contacts.write'
-  | 'contacts.delete'
-  | 'deliveries.read'
-  | 'deliveries.write'
-  | 'deliveries.delete'
-  | 'delivery_items.read'
-  | 'delivery_items.write'
+  | "organizations.read"
+  | "organizations.write"
+  | "organizations.delete"
+  | "contacts.read"
+  | "contacts.write"
+  | "contacts.delete"
+  | "deliveries.read"
+  | "deliveries.write"
+  | "deliveries.delete"
+  | "delivery_items.read"
+  | "delivery_items.write";
 
 type RolePermissionRow = {
-  role: Role
-  permission: AppPermission
-  allowed: boolean
-  updated_at: string
-}
+  role: Role;
+  permission: AppPermission;
+  allowed: boolean;
+  updated_at: string;
+};
 
-const editableRoles: Role[] = ['contacts_manager', 'delivery_coordinator', 'view_only']
+const editableRoles: Role[] = [
+  "contacts_manager",
+  "delivery_coordinator",
+  "view_only",
+];
 
-const permissions: Array<{ group: string; permission: AppPermission; label: string }> = [
-  { group: 'Organizations', permission: 'organizations.read', label: 'Read organizations' },
-  { group: 'Organizations', permission: 'organizations.write', label: 'Create/update organizations' },
-  { group: 'Organizations', permission: 'organizations.delete', label: 'Delete organizations' },
-  { group: 'Contacts', permission: 'contacts.read', label: 'Read contacts' },
-  { group: 'Contacts', permission: 'contacts.write', label: 'Create/update contacts' },
-  { group: 'Contacts', permission: 'contacts.delete', label: 'Delete contacts' },
-  { group: 'Deliveries', permission: 'deliveries.read', label: 'Read deliveries' },
-  { group: 'Deliveries', permission: 'deliveries.write', label: 'Create/update deliveries' },
-  { group: 'Deliveries', permission: 'deliveries.delete', label: 'Delete deliveries' },
-  { group: 'Items', permission: 'delivery_items.read', label: 'Read delivery items' },
-  { group: 'Items', permission: 'delivery_items.write', label: 'Create/update/delete delivery items' },
-]
+const permissions: Array<{
+  group: string;
+  permission: AppPermission;
+  label: string;
+}> = [
+  {
+    group: "Organizations",
+    permission: "organizations.read",
+    label: "Read organizations",
+  },
+  {
+    group: "Organizations",
+    permission: "organizations.write",
+    label: "Create/update organizations",
+  },
+  {
+    group: "Organizations",
+    permission: "organizations.delete",
+    label: "Delete organizations",
+  },
+  { group: "Contacts", permission: "contacts.read", label: "Read contacts" },
+  {
+    group: "Contacts",
+    permission: "contacts.write",
+    label: "Create/update contacts",
+  },
+  {
+    group: "Contacts",
+    permission: "contacts.delete",
+    label: "Delete contacts",
+  },
+  {
+    group: "Deliveries",
+    permission: "deliveries.read",
+    label: "Read deliveries",
+  },
+  {
+    group: "Deliveries",
+    permission: "deliveries.write",
+    label: "Create/update deliveries",
+  },
+  {
+    group: "Deliveries",
+    permission: "deliveries.delete",
+    label: "Delete deliveries",
+  },
+  {
+    group: "Items",
+    permission: "delivery_items.read",
+    label: "Read delivery items",
+  },
+  {
+    group: "Items",
+    permission: "delivery_items.write",
+    label: "Create/update/delete delivery items",
+  },
+];
 
 export function AdminPermissions() {
-  const [rows, setRows] = useState<RolePermissionRow[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [savingKey, setSavingKey] = useState<string | null>(null)
+  const [rows, setRows] = useState<RolePermissionRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [savingKey, setSavingKey] = useState<string | null>(null);
 
   const load = async () => {
-    setLoading(true)
-    setError(null)
+    setLoading(true);
+    setError(null);
     const { data, error } = await supabase
-      .from('role_permissions')
-      .select('role, permission, allowed, updated_at')
-      .in('role', editableRoles)
-      .order('role')
-      .order('permission')
+      .from("role_permissions")
+      .select("role, permission, allowed, updated_at")
+      .in("role", editableRoles)
+      .order("role")
+      .order("permission");
 
     if (error) {
-      setError(error.message)
-      setRows([])
-      setLoading(false)
-      return
+      setError(error.message);
+      setRows([]);
+      setLoading(false);
+      return;
     }
-    setRows((data ?? []) as RolePermissionRow[])
-    setLoading(false)
-  }
+    setRows((data ?? []) as RolePermissionRow[]);
+    setLoading(false);
+  };
 
   useEffect(() => {
-    void load()
-  }, [])
+    void load();
+  }, []);
 
-  const key = (r: Role, p: AppPermission) => `${r}:${p}`
+  const key = (r: Role, p: AppPermission) => `${r}:${p}`;
 
   const allowedMap = useMemo(() => {
-    const map = new Map<string, boolean>()
+    const map = new Map<string, boolean>();
     for (const r of rows) {
-      map.set(key(r.role, r.permission), r.allowed)
+      map.set(key(r.role, r.permission), r.allowed);
     }
-    return map
-  }, [rows])
+    return map;
+  }, [rows]);
 
-  const toggle = async (role: Role, permission: AppPermission, allowed: boolean) => {
-    const k = key(role, permission)
-    setSavingKey(k)
-    setError(null)
+  const toggle = async (
+    role: Role,
+    permission: AppPermission,
+    allowed: boolean,
+  ) => {
+    const k = key(role, permission);
+    setSavingKey(k);
+    setError(null);
 
-    const { error } = await supabase.from('role_permissions').upsert(
+    const { error } = await supabase.from("role_permissions").upsert(
       {
         role,
         permission,
         allowed,
         updated_at: new Date().toISOString(),
       },
-      { onConflict: 'role,permission' },
-    )
+      { onConflict: "role,permission" },
+    );
 
     if (error) {
-      setError(error.message)
-      setSavingKey(null)
-      return
+      setError(error.message);
+      setSavingKey(null);
+      return;
     }
 
-    await load()
-    setSavingKey(null)
-  }
+    await load();
+    setSavingKey(null);
+  };
 
   const grouped = useMemo(() => {
-    const groups = new Map<string, typeof permissions>()
+    const groups = new Map<string, typeof permissions>();
     for (const p of permissions) {
-      const list = groups.get(p.group) ?? []
-      list.push(p)
-      groups.set(p.group, list)
+      const list = groups.get(p.group) ?? [];
+      list.push(p);
+      groups.set(p.group, list);
     }
-    return Array.from(groups.entries())
-  }, [])
+    return Array.from(groups.entries());
+  }, []);
 
   return (
     <div className="flex flex-col gap-4">
@@ -123,13 +175,19 @@ export function AdminPermissions() {
             Toggle what each role is allowed to do. Admin is always allowed.
           </p>
         </div>
-        <Button variant="secondary" onClick={() => void load()} disabled={loading || savingKey !== null}>
+        <Button
+          variant="secondary"
+          onClick={() => void load()}
+          disabled={loading || savingKey !== null}
+        >
           Refresh
         </Button>
       </div>
 
       {error ? (
-        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div>
+        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          {error}
+        </div>
       ) : null}
 
       {loading ? (
@@ -151,9 +209,14 @@ export function AdminPermissions() {
                   </colgroup>
                   <thead className="text-xs uppercase text-neutral-600">
                     <tr className="border-b border-neutral-200">
-                      <th className="px-3 py-2 text-left align-top">Permission</th>
+                      <th className="px-3 py-2 text-left align-top">
+                        Permission
+                      </th>
                       {editableRoles.map((r) => (
-                        <th key={r} className="px-3 py-2 text-center align-top whitespace-nowrap">
+                        <th
+                          key={r}
+                          className="px-3 py-2 text-center align-top whitespace-nowrap"
+                        >
                           {r}
                         </th>
                       ))}
@@ -161,14 +224,19 @@ export function AdminPermissions() {
                   </thead>
                   <tbody>
                     {perms.map((p) => (
-                      <tr key={p.permission} className="border-t border-neutral-200">
+                      <tr
+                        key={p.permission}
+                        className="border-t border-neutral-200"
+                      >
                         <td className="px-3 py-2 align-top">
                           <div className="font-medium">{p.label}</div>
-                          <div className="text-xs text-neutral-600">{p.permission}</div>
+                          <div className="text-xs text-neutral-600">
+                            {p.permission}
+                          </div>
                         </td>
                         {editableRoles.map((r) => {
-                          const k = key(r, p.permission)
-                          const isAllowed = allowedMap.get(k) ?? false
+                          const k = key(r, p.permission);
+                          const isAllowed = allowedMap.get(k) ?? false;
                           return (
                             <td key={k} className="px-3 py-2 align-top">
                               <label className="flex w-full items-center justify-center gap-2 pt-0.5">
@@ -176,12 +244,20 @@ export function AdminPermissions() {
                                   type="checkbox"
                                   checked={isAllowed}
                                   disabled={savingKey === k}
-                                  onChange={(e) => void toggle(r, p.permission, e.target.checked)}
+                                  onChange={(e) =>
+                                    void toggle(
+                                      r,
+                                      p.permission,
+                                      e.target.checked,
+                                    )
+                                  }
                                 />
-                                <span className="text-sm">{isAllowed ? 'Allowed' : 'Denied'}</span>
+                                <span className="text-sm">
+                                  {isAllowed ? "Allowed" : "Denied"}
+                                </span>
                               </label>
                             </td>
-                          )
+                          );
                         })}
                       </tr>
                     ))}
@@ -193,5 +269,5 @@ export function AdminPermissions() {
         </div>
       )}
     </div>
-  )
+  );
 }

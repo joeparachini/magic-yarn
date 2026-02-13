@@ -1,72 +1,79 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { useAuth } from '../auth/AuthProvider'
-import { Button } from '../components/ui/button'
-import { supabase } from '../lib/supabaseClient'
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { useAuth } from "../auth/AuthProvider";
+import { Button } from "../components/ui/button";
+import { supabase } from "../lib/supabaseClient";
 
-type OrganizationType = 'hospital' | 'clinic' | 'cancer_center' | 'other'
+type OrganizationType = "hospital" | "clinic" | "cancer_center" | "other";
 
 type OrganizationRow = {
-  id: string
-  name: string
-  type: OrganizationType
-  city: string | null
-  state: string | null
-  updated_at: string
-}
+  id: string;
+  name: string;
+  type: OrganizationType;
+  city: string | null;
+  state: string | null;
+  updated_at: string;
+};
 
 export function OrganizationsList() {
-  const { role } = useAuth()
-  const canEdit = role === 'admin' || role === 'contacts_manager'
+  const { role } = useAuth();
+  const canEdit = role === "admin" || role === "contacts_manager";
 
-  const [rows, setRows] = useState<OrganizationRow[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [query, setQuery] = useState('')
+  const [rows, setRows] = useState<OrganizationRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
 
   const load = async () => {
-    setLoading(true)
-    setError(null)
+    setLoading(true);
+    setError(null);
 
     const { data, error } = await supabase
-      .from('organizations')
-      .select('id, name, type, city, state, updated_at')
-      .order('name', { ascending: true })
+      .from("organizations")
+      .select("id, name, type, city, state, updated_at")
+      .order("name", { ascending: true });
 
     if (error) {
-      setError(error.message)
-      setRows([])
-      setLoading(false)
-      return
+      setError(error.message);
+      setRows([]);
+      setLoading(false);
+      return;
     }
 
-    setRows((data ?? []) as OrganizationRow[])
-    setLoading(false)
-  }
+    setRows((data ?? []) as OrganizationRow[]);
+    setLoading(false);
+  };
 
   useEffect(() => {
-    void load()
-  }, [])
+    void load();
+  }, []);
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return rows
+    const q = query.trim().toLowerCase();
+    if (!q) return rows;
     return rows.filter((r) => {
-      const haystack = `${r.name} ${r.city ?? ''} ${r.state ?? ''}`.toLowerCase()
-      return haystack.includes(q)
-    })
-  }, [rows, query])
+      const haystack =
+        `${r.name} ${r.city ?? ""} ${r.state ?? ""}`.toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [rows, query]);
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold">Organizations</h1>
-          <p className="text-sm text-neutral-600">Hospitals, clinics, and other delivery destinations.</p>
+          <p className="text-sm text-neutral-600">
+            Hospitals, clinics, and other delivery destinations.
+          </p>
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="secondary" onClick={() => void load()} disabled={loading}>
+          <Button
+            variant="secondary"
+            onClick={() => void load()}
+            disabled={loading}
+          >
             Refresh
           </Button>
           {canEdit ? (
@@ -78,7 +85,9 @@ export function OrganizationsList() {
       </div>
 
       {error ? (
-        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div>
+        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          {error}
+        </div>
       ) : null}
 
       <div className="flex items-center gap-2">
@@ -108,12 +117,17 @@ export function OrganizationsList() {
               {filtered.map((r) => (
                 <tr key={r.id} className="border-t border-neutral-200">
                   <td className="px-3 py-2">
-                    <Link className="font-medium underline" to={`/organizations/${r.id}`}>
+                    <Link
+                      className="font-medium underline"
+                      to={`/organizations/${r.id}`}
+                    >
                       {r.name}
                     </Link>
                   </td>
                   <td className="px-3 py-2">{r.type}</td>
-                  <td className="px-3 py-2">{[r.city, r.state].filter(Boolean).join(', ') || '—'}</td>
+                  <td className="px-3 py-2">
+                    {[r.city, r.state].filter(Boolean).join(", ") || "—"}
+                  </td>
                   <td className="px-3 py-2 text-neutral-600">
                     {new Date(r.updated_at).toLocaleDateString()}
                   </td>
@@ -121,7 +135,10 @@ export function OrganizationsList() {
               ))}
               {filtered.length === 0 ? (
                 <tr>
-                  <td className="px-3 py-6 text-center text-sm text-neutral-600" colSpan={4}>
+                  <td
+                    className="px-3 py-6 text-center text-sm text-neutral-600"
+                    colSpan={4}
+                  >
                     No organizations found.
                   </td>
                 </tr>
@@ -131,5 +148,5 @@ export function OrganizationsList() {
         </div>
       )}
     </div>
-  )
+  );
 }

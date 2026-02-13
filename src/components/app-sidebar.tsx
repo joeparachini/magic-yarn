@@ -1,4 +1,4 @@
-import * as React from "react"
+import * as React from "react";
 import {
   Building2,
   GalleryVerticalEnd,
@@ -7,8 +7,8 @@ import {
   Shield,
   Truck,
   Users,
-} from "lucide-react"
-import { NavLink } from "react-router-dom"
+} from "lucide-react";
+import { NavLink } from "react-router-dom";
 
 import {
   Sidebar,
@@ -21,17 +21,17 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
-} from "@/components/ui/sidebar"
+} from "@/components/ui/sidebar";
 
-import type { Role } from "@/auth/types"
-import { Button } from "@/components/ui/button"
+import type { Role } from "@/auth/types";
+import { Button } from "@/components/ui/button";
 
 type SidebarNavLinkProps = {
-  to: string
-  label: string
-  end?: boolean
-  icon: React.ComponentType<{ className?: string }>
-}
+  to: string;
+  label: string;
+  end?: boolean;
+  icon: React.ComponentType<{ className?: string }>;
+};
 
 function SidebarNavLink({ to, label, end, icon: Icon }: SidebarNavLinkProps) {
   return (
@@ -43,7 +43,7 @@ function SidebarNavLink({ to, label, end, icon: Icon }: SidebarNavLinkProps) {
         </NavLink>
       </SidebarMenuButton>
     </SidebarMenuItem>
-  )
+  );
 }
 
 export function AppSidebar({
@@ -54,13 +54,16 @@ export function AppSidebar({
   onSignOut,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
-  userRole: Role | null
-  userName: string | null
-  userEmail: string | null
-  userAvatarUrl: string | null
-  onSignOut: () => void
+  userRole: Role | null;
+  userName: string | null;
+  userEmail: string | null;
+  userAvatarUrl: string | null;
+  onSignOut: () => void;
 }) {
-  const initials = (userName ?? userEmail ?? 'U').trim().slice(0, 1).toUpperCase()
+  const initials = (userName ?? userEmail ?? "U")
+    .trim()
+    .slice(0, 1)
+    .toUpperCase();
 
   return (
     <Sidebar {...props}>
@@ -84,8 +87,17 @@ export function AppSidebar({
       <SidebarContent>
         <SidebarGroup>
           <SidebarMenu>
-            <SidebarNavLink to="/" end label="Dashboard" icon={LayoutDashboard} />
-            <SidebarNavLink to="/organizations" label="Organizations" icon={Building2} />
+            <SidebarNavLink
+              to="/"
+              end
+              label="Dashboard"
+              icon={LayoutDashboard}
+            />
+            <SidebarNavLink
+              to="/organizations"
+              label="Organizations"
+              icon={Building2}
+            />
             <SidebarNavLink to="/contacts" label="Contacts" icon={Users} />
             <SidebarNavLink to="/deliveries" label="Deliveries" icon={Truck} />
           </SidebarMenu>
@@ -96,7 +108,11 @@ export function AppSidebar({
             <SidebarGroupLabel>Admin</SidebarGroupLabel>
             <SidebarMenu>
               <SidebarNavLink to="/admin/users" label="Users" icon={Shield} />
-              <SidebarNavLink to="/admin/permissions" label="Permissions" icon={Package} />
+              <SidebarNavLink
+                to="/admin/permissions"
+                label="Permissions"
+                icon={Package}
+              />
             </SidebarMenu>
           </SidebarGroup>
         ) : null}
@@ -118,9 +134,19 @@ export function AppSidebar({
               </div>
             )}
             <div className="min-w-0">
-              <div className="truncate text-sm font-medium leading-5">{userName || userEmail || 'Signed in'}</div>
-              {userEmail ? <div className="truncate text-xs text-muted-foreground">{userEmail}</div> : null}
-              {userRole ? <div className="text-xs text-muted-foreground">Role: {userRole}</div> : null}
+              <div className="truncate text-sm font-medium leading-5">
+                {userName || userEmail || "Signed in"}
+              </div>
+              {userEmail ? (
+                <div className="truncate text-xs text-muted-foreground">
+                  {userEmail}
+                </div>
+              ) : null}
+              {userRole ? (
+                <div className="text-xs text-muted-foreground">
+                  Role: {userRole}
+                </div>
+              ) : null}
             </div>
           </div>
           <Button variant="secondary" className="w-full" onClick={onSignOut}>
@@ -130,5 +156,5 @@ export function AppSidebar({
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>
-  )
+  );
 }

@@ -1,7 +1,7 @@
-import { Fragment, useMemo } from 'react'
-import { Link, Outlet, useLocation } from 'react-router-dom'
-import { useAuth } from '../auth/AuthProvider'
-import { AppSidebar } from './app-sidebar'
+import { Fragment, useMemo } from "react";
+import { Link, Outlet, useLocation } from "react-router-dom";
+import { useAuth } from "../auth/AuthProvider";
+import { AppSidebar } from "./app-sidebar";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -9,58 +9,63 @@ import {
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
-} from './ui/breadcrumb'
-import { SidebarInset, SidebarProvider, SidebarTrigger } from './ui/sidebar'
+} from "./ui/breadcrumb";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "./ui/sidebar";
 
-type Crumb = { label: string; href?: string }
+type Crumb = { label: string; href?: string };
 
 function buildBreadcrumbs(pathname: string): Crumb[] {
-  if (pathname === '/' || pathname === '') {
-    return [{ label: 'Dashboard' }]
+  if (pathname === "/" || pathname === "") {
+    return [{ label: "Dashboard" }];
   }
 
-  const segments = pathname.split('/').filter(Boolean)
-  const [first, second] = segments
+  const segments = pathname.split("/").filter(Boolean);
+  const [first, second] = segments;
 
-  const crumbs: Crumb[] = [{ label: 'Dashboard', href: '/' }]
+  const crumbs: Crumb[] = [{ label: "Dashboard", href: "/" }];
 
   switch (first) {
-    case 'contacts':
-      crumbs.push({ label: 'Contacts', href: '/contacts' })
-      if (second) crumbs.push({ label: second === 'new' ? 'New' : 'Edit' })
-      break
-    case 'organizations':
-      crumbs.push({ label: 'Organizations', href: '/organizations' })
-      if (second) crumbs.push({ label: second === 'new' ? 'New' : 'Edit' })
-      break
-    case 'deliveries':
-      crumbs.push({ label: 'Deliveries', href: '/deliveries' })
-      if (second) crumbs.push({ label: second === 'new' ? 'New' : 'Edit' })
-      break
-    case 'admin':
-      crumbs.push({ label: 'Admin' })
-      if (second === 'users') crumbs.push({ label: 'Users' })
-      else if (second === 'permissions') crumbs.push({ label: 'Permissions' })
-      else if (second) crumbs.push({ label: second })
-      break
+    case "contacts":
+      crumbs.push({ label: "Contacts", href: "/contacts" });
+      if (second) crumbs.push({ label: second === "new" ? "New" : "Edit" });
+      break;
+    case "organizations":
+      crumbs.push({ label: "Organizations", href: "/organizations" });
+      if (second) crumbs.push({ label: second === "new" ? "New" : "Edit" });
+      break;
+    case "deliveries":
+      crumbs.push({ label: "Deliveries", href: "/deliveries" });
+      if (second) crumbs.push({ label: second === "new" ? "New" : "Edit" });
+      break;
+    case "admin":
+      crumbs.push({ label: "Admin" });
+      if (second === "users") crumbs.push({ label: "Users" });
+      else if (second === "permissions") crumbs.push({ label: "Permissions" });
+      else if (second) crumbs.push({ label: second });
+      break;
     default:
-      crumbs.push({ label: first.charAt(0).toUpperCase() + first.slice(1) })
-      if (second) crumbs.push({ label: second })
-      break
+      crumbs.push({ label: first.charAt(0).toUpperCase() + first.slice(1) });
+      if (second) crumbs.push({ label: second });
+      break;
   }
 
-  const last = crumbs[crumbs.length - 1]
-  crumbs[crumbs.length - 1] = { label: last.label }
-  return crumbs
+  const last = crumbs[crumbs.length - 1];
+  crumbs[crumbs.length - 1] = { label: last.label };
+  return crumbs;
 }
 
 export function AppShell() {
-  const { user, role, signOut } = useAuth()
-  const userName = (user?.user_metadata?.full_name as string | undefined) ?? null
-  const userEmail = user?.email ?? null
-  const userAvatarUrl = (user?.user_metadata?.avatar_url as string | undefined) ?? null
-  const location = useLocation()
-  const crumbs = useMemo(() => buildBreadcrumbs(location.pathname), [location.pathname])
+  const { user, role, signOut } = useAuth();
+  const userName =
+    (user?.user_metadata?.full_name as string | undefined) ?? null;
+  const userEmail = user?.email ?? null;
+  const userAvatarUrl =
+    (user?.user_metadata?.avatar_url as string | undefined) ?? null;
+  const location = useLocation();
+  const crumbs = useMemo(
+    () => buildBreadcrumbs(location.pathname),
+    [location.pathname],
+  );
 
   return (
     <SidebarProvider>
@@ -102,5 +107,5 @@ export function AppShell() {
         </main>
       </SidebarInset>
     </SidebarProvider>
-  )
+  );
 }
