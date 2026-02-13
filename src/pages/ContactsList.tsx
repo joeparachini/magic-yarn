@@ -74,11 +74,11 @@ export function ContactsList() {
   }, [rows, query]);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 rounded-xl border border-border/70 bg-card/70 p-4 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold">Contacts</h1>
-          <p className="text-sm text-neutral-600">
+          <p className="text-sm text-muted-foreground">
             People at organizations you deliver to.
           </p>
         </div>
@@ -100,27 +100,29 @@ export function ContactsList() {
       </div>
 
       {error ? (
-        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+        <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
           {error}
         </div>
       ) : null}
 
       <div className="flex items-center gap-2">
         <input
-          className="w-full max-w-md rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
+          className="w-full max-w-md rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
           placeholder="Search contacts…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        <div className="text-xs text-neutral-600">{filtered.length} shown</div>
+        <div className="text-xs text-muted-foreground">
+          {filtered.length} shown
+        </div>
       </div>
 
       {loading ? (
-        <div className="text-sm text-neutral-600">Loading…</div>
+        <div className="text-sm text-muted-foreground">Loading…</div>
       ) : (
-        <div className="overflow-x-auto rounded-md border border-neutral-200">
+        <div className="overflow-x-auto rounded-xl border border-border bg-card/80">
           <table className="min-w-full text-left text-sm">
-            <thead className="bg-neutral-50 text-xs uppercase text-neutral-600">
+            <thead className="bg-muted/35 text-xs uppercase text-muted-foreground">
               <tr>
                 <th className="px-3 py-2">Name</th>
                 <th className="px-3 py-2">Organization</th>
@@ -131,16 +133,19 @@ export function ContactsList() {
             </thead>
             <tbody>
               {filtered.map((r) => (
-                <tr key={r.id} className="border-t border-neutral-200">
+                <tr
+                  key={r.id}
+                  className="border-t border-border/80 hover:bg-muted/20"
+                >
                   <td className="px-3 py-2">
                     <Link
-                      className="font-medium underline"
+                      className="font-medium text-foreground underline decoration-muted-foreground/50 underline-offset-2"
                       to={`/contacts/${r.id}`}
                     >
                       {r.last_name}, {r.first_name}
                     </Link>
                     {r.job_title ? (
-                      <div className="text-xs text-neutral-600">
+                      <div className="text-xs text-muted-foreground">
                         {r.job_title}
                       </div>
                     ) : null}
@@ -148,7 +153,7 @@ export function ContactsList() {
                   <td className="px-3 py-2">{r.organizations?.name ?? "—"}</td>
                   <td className="px-3 py-2">{r.email ?? "—"}</td>
                   <td className="px-3 py-2">{r.phone ?? "—"}</td>
-                  <td className="px-3 py-2 text-neutral-600">
+                  <td className="px-3 py-2 text-muted-foreground">
                     {new Date(r.updated_at).toLocaleDateString()}
                   </td>
                 </tr>
@@ -156,7 +161,7 @@ export function ContactsList() {
               {filtered.length === 0 ? (
                 <tr>
                   <td
-                    className="px-3 py-6 text-center text-sm text-neutral-600"
+                    className="px-3 py-6 text-center text-sm text-muted-foreground"
                     colSpan={5}
                   >
                     No contacts found.

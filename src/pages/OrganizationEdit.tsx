@@ -234,11 +234,11 @@ export function OrganizationEdit() {
   };
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 rounded-xl border border-border/70 bg-card/70 p-4 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold">{title}</h1>
-          <p className="text-sm text-neutral-600">
+          <p className="text-sm text-muted-foreground">
             <Link className="underline" to="/organizations">
               Back to organizations
             </Link>
@@ -265,28 +265,28 @@ export function OrganizationEdit() {
       </div>
 
       {!canEdit ? (
-        <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+        <div className="rounded-md border border-border bg-muted/35 p-3 text-sm text-foreground">
           You have view-only access to organizations.
         </div>
       ) : null}
 
       {error ? (
-        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+        <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
           {error}
         </div>
       ) : null}
 
       {loading ? (
-        <div className="text-sm text-neutral-600">Loading…</div>
+        <div className="text-sm text-muted-foreground">Loading…</div>
       ) : (
         <>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="flex flex-col gap-2">
-              <label className="text-xs font-medium text-neutral-700">
+              <label className="text-xs font-medium text-foreground">
                 Name
               </label>
               <input
-                className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
+                className="rounded-md border border-input bg-card px-3 py-2 text-sm"
                 value={form.name}
                 onChange={(e) => update({ name: e.target.value })}
                 disabled={!canEdit || saving}
@@ -294,11 +294,11 @@ export function OrganizationEdit() {
             </div>
 
             <div className="flex flex-col gap-2">
-              <label className="text-xs font-medium text-neutral-700">
+              <label className="text-xs font-medium text-foreground">
                 Type
               </label>
               <select
-                className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
+                className="rounded-md border border-input bg-card px-3 py-2 text-sm"
                 value={form.type}
                 onChange={(e) =>
                   update({ type: e.target.value as OrganizationType })
@@ -314,11 +314,11 @@ export function OrganizationEdit() {
             </div>
 
             <div className="flex flex-col gap-2 md:col-span-2">
-              <label className="text-xs font-medium text-neutral-700">
+              <label className="text-xs font-medium text-foreground">
                 Address
               </label>
               <input
-                className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
+                className="rounded-md border border-input bg-card px-3 py-2 text-sm"
                 value={form.address}
                 onChange={(e) => update({ address: e.target.value })}
                 disabled={!canEdit || saving}
@@ -326,11 +326,11 @@ export function OrganizationEdit() {
             </div>
 
             <div className="flex flex-col gap-2">
-              <label className="text-xs font-medium text-neutral-700">
+              <label className="text-xs font-medium text-foreground">
                 City
               </label>
               <input
-                className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
+                className="rounded-md border border-input bg-card px-3 py-2 text-sm"
                 value={form.city}
                 onChange={(e) => update({ city: e.target.value })}
                 disabled={!canEdit || saving}
@@ -338,11 +338,11 @@ export function OrganizationEdit() {
             </div>
 
             <div className="flex flex-col gap-2">
-              <label className="text-xs font-medium text-neutral-700">
+              <label className="text-xs font-medium text-foreground">
                 State
               </label>
               <input
-                className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
+                className="rounded-md border border-input bg-card px-3 py-2 text-sm"
                 value={form.state}
                 onChange={(e) => update({ state: e.target.value })}
                 disabled={!canEdit || saving}
@@ -350,11 +350,9 @@ export function OrganizationEdit() {
             </div>
 
             <div className="flex flex-col gap-2">
-              <label className="text-xs font-medium text-neutral-700">
-                ZIP
-              </label>
+              <label className="text-xs font-medium text-foreground">ZIP</label>
               <input
-                className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
+                className="rounded-md border border-input bg-card px-3 py-2 text-sm"
                 value={form.zip}
                 onChange={(e) => update({ zip: e.target.value })}
                 disabled={!canEdit || saving}
@@ -362,11 +360,11 @@ export function OrganizationEdit() {
             </div>
 
             <div className="flex flex-col gap-2">
-              <label className="text-xs font-medium text-neutral-700">
+              <label className="text-xs font-medium text-foreground">
                 Phone
               </label>
               <input
-                className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
+                className="rounded-md border border-input bg-card px-3 py-2 text-sm"
                 value={form.phone}
                 onChange={(e) => update({ phone: e.target.value })}
                 disabled={!canEdit || saving}
@@ -374,11 +372,11 @@ export function OrganizationEdit() {
             </div>
 
             <div className="flex flex-col gap-2">
-              <label className="text-xs font-medium text-neutral-700">
+              <label className="text-xs font-medium text-foreground">
                 Email
               </label>
               <input
-                className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
+                className="rounded-md border border-input bg-card px-3 py-2 text-sm"
                 value={form.email}
                 onChange={(e) => update({ email: e.target.value })}
                 disabled={!canEdit || saving}
@@ -386,11 +384,11 @@ export function OrganizationEdit() {
             </div>
 
             <div className="flex flex-col gap-2 md:col-span-2">
-              <label className="text-xs font-medium text-neutral-700">
+              <label className="text-xs font-medium text-foreground">
                 Notes
               </label>
               <textarea
-                className="min-h-28 rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
+                className="min-h-28 rounded-md border border-input bg-card px-3 py-2 text-sm"
                 value={form.notes}
                 onChange={(e) => update({ notes: e.target.value })}
                 disabled={!canEdit || saving}
@@ -402,13 +400,13 @@ export function OrganizationEdit() {
             <div className="flex items-end justify-between gap-4">
               <div>
                 <h2 className="text-lg font-semibold">Associated contacts</h2>
-                <p className="text-sm text-neutral-600">
+                <p className="text-sm text-muted-foreground">
                   Contacts at this organization.
                 </p>
               </div>
               {!isNew && canViewContacts ? (
                 <div className="flex items-center gap-2">
-                  <div className="text-xs text-neutral-600">
+                  <div className="text-xs text-muted-foreground">
                     {associatedContacts.length} total
                   </div>
                   {canEdit ? (
@@ -423,23 +421,25 @@ export function OrganizationEdit() {
             </div>
 
             {!canViewContacts ? (
-              <div className="rounded-md border border-neutral-200 bg-neutral-50 p-3 text-sm text-neutral-700">
+              <div className="rounded-md border border-border bg-muted/35 p-3 text-sm text-foreground">
                 You don’t have access to view contacts.
               </div>
             ) : isNew ? (
-              <div className="rounded-md border border-neutral-200 bg-neutral-50 p-3 text-sm text-neutral-700">
+              <div className="rounded-md border border-border bg-muted/35 p-3 text-sm text-foreground">
                 Save this organization to see its contacts.
               </div>
             ) : associatedContactsError ? (
-              <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+              <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
                 {associatedContactsError}
               </div>
             ) : associatedContactsLoading ? (
-              <div className="text-sm text-neutral-600">Loading contacts…</div>
+              <div className="text-sm text-muted-foreground">
+                Loading contacts…
+              </div>
             ) : (
-              <div className="overflow-x-auto rounded-md border border-neutral-200">
+              <div className="overflow-x-auto rounded-xl border border-border bg-card/80">
                 <table className="min-w-full text-left text-sm">
-                  <thead className="bg-neutral-50 text-xs uppercase text-neutral-600">
+                  <thead className="bg-muted/35 text-xs uppercase text-muted-foreground">
                     <tr>
                       <th className="px-3 py-2">Name</th>
                       <th className="px-3 py-2">Email</th>
@@ -449,23 +449,26 @@ export function OrganizationEdit() {
                   </thead>
                   <tbody>
                     {associatedContacts.map((c) => (
-                      <tr key={c.id} className="border-t border-neutral-200">
+                      <tr
+                        key={c.id}
+                        className="border-t border-border/80 hover:bg-muted/20"
+                      >
                         <td className="px-3 py-2">
                           <Link
-                            className="font-medium underline"
+                            className="font-medium text-foreground underline decoration-muted-foreground/50 underline-offset-2"
                             to={`/contacts/${c.id}`}
                           >
                             {c.last_name}, {c.first_name}
                           </Link>
                           {c.job_title ? (
-                            <div className="text-xs text-neutral-600">
+                            <div className="text-xs text-muted-foreground">
                               {c.job_title}
                             </div>
                           ) : null}
                         </td>
                         <td className="px-3 py-2">{c.email ?? "—"}</td>
                         <td className="px-3 py-2">{c.phone ?? "—"}</td>
-                        <td className="px-3 py-2 text-neutral-600">
+                        <td className="px-3 py-2 text-muted-foreground">
                           {new Date(c.updated_at).toLocaleDateString()}
                         </td>
                       </tr>
@@ -473,7 +476,7 @@ export function OrganizationEdit() {
                     {associatedContacts.length === 0 ? (
                       <tr>
                         <td
-                          className="px-3 py-6 text-center text-sm text-neutral-600"
+                          className="px-3 py-6 text-center text-sm text-muted-foreground"
                           colSpan={4}
                         >
                           No contacts for this organization.

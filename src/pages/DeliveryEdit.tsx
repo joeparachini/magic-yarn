@@ -448,11 +448,11 @@ export function DeliveryEdit() {
   };
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 rounded-xl border border-border/70 bg-card/70 p-4 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold">{title}</h1>
-          <p className="text-sm text-neutral-600">
+          <p className="text-sm text-muted-foreground">
             <Link className="underline" to="/deliveries">
               Back to deliveries
             </Link>
@@ -478,28 +478,28 @@ export function DeliveryEdit() {
       </div>
 
       {!canEdit ? (
-        <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+        <div className="rounded-md border border-border bg-muted/35 p-3 text-sm text-foreground">
           You have view-only access to deliveries.
         </div>
       ) : null}
 
       {error ? (
-        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+        <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
           {error}
         </div>
       ) : null}
 
       {loading ? (
-        <div className="text-sm text-neutral-600">Loading…</div>
+        <div className="text-sm text-muted-foreground">Loading…</div>
       ) : (
         <div className="flex flex-col gap-6">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="flex flex-col gap-2 md:col-span-2">
-              <label className="text-xs font-medium text-neutral-700">
+              <label className="text-xs font-medium text-foreground">
                 Organization
               </label>
               <select
-                className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
+                className="rounded-md border border-input bg-card px-3 py-2 text-sm"
                 value={form.organization_id}
                 onChange={(e) =>
                   update({ organization_id: e.target.value, contact_id: "" })
@@ -516,11 +516,11 @@ export function DeliveryEdit() {
             </div>
 
             <div className="flex flex-col gap-2 md:col-span-2">
-              <label className="text-xs font-medium text-neutral-700">
+              <label className="text-xs font-medium text-foreground">
                 Contact
               </label>
               <select
-                className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
+                className="rounded-md border border-input bg-card px-3 py-2 text-sm"
                 value={form.contact_id}
                 onChange={(e) => update({ contact_id: e.target.value })}
                 disabled={!canEdit || saving || !form.organization_id}
@@ -533,19 +533,19 @@ export function DeliveryEdit() {
                 ))}
               </select>
               {!form.organization_id ? (
-                <div className="text-xs text-neutral-600">
+                <div className="text-xs text-muted-foreground">
                   Select an organization first.
                 </div>
               ) : null}
             </div>
 
             <div className="flex flex-col gap-2">
-              <label className="text-xs font-medium text-neutral-700">
+              <label className="text-xs font-medium text-foreground">
                 Delivery date
               </label>
               <input
                 type="date"
-                className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
+                className="rounded-md border border-input bg-card px-3 py-2 text-sm"
                 value={form.delivery_date}
                 onChange={(e) => update({ delivery_date: e.target.value })}
                 disabled={!canEdit || saving}
@@ -553,11 +553,11 @@ export function DeliveryEdit() {
             </div>
 
             <div className="flex flex-col gap-2">
-              <label className="text-xs font-medium text-neutral-700">
+              <label className="text-xs font-medium text-foreground">
                 Status
               </label>
               <select
-                className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
+                className="rounded-md border border-input bg-card px-3 py-2 text-sm"
                 value={form.status}
                 onChange={(e) =>
                   update({ status: e.target.value as DeliveryStatus })
@@ -573,12 +573,12 @@ export function DeliveryEdit() {
             </div>
 
             <div className="flex flex-col gap-2 md:col-span-2">
-              <label className="text-xs font-medium text-neutral-700">
+              <label className="text-xs font-medium text-foreground">
                 Coordinator
               </label>
               {isAdmin ? (
                 <select
-                  className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
+                  className="rounded-md border border-input bg-card px-3 py-2 text-sm"
                   value={form.coordinator_id}
                   onChange={(e) => update({ coordinator_id: e.target.value })}
                   disabled={!canEdit || saving}
@@ -593,7 +593,7 @@ export function DeliveryEdit() {
               ) : (
                 <div className="flex items-center gap-2">
                   <input
-                    className="w-full rounded-md border border-neutral-300 bg-neutral-50 px-3 py-2 text-sm"
+                    className="w-full rounded-md border border-input bg-muted/35 px-3 py-2 text-sm"
                     value={
                       form.coordinator_id
                         ? form.coordinator_id === user?.id
@@ -617,10 +617,10 @@ export function DeliveryEdit() {
             </div>
 
             <div className="flex flex-col gap-2 md:col-span-2">
-              <label className="text-xs font-medium text-neutral-700">
+              <label className="text-xs font-medium text-foreground">
                 Address
               </label>
-              <div className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3">
+              <div className="flex flex-col gap-2 rounded-md border border-border p-3">
                 <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-4">
                   <label className="flex items-center gap-2 text-sm">
                     <input
@@ -643,12 +643,12 @@ export function DeliveryEdit() {
                     Contact address
                   </label>
                 </div>
-                <div className="rounded-md border border-neutral-300 bg-neutral-50 px-3 py-2 text-sm text-neutral-800">
+                <div className="rounded-md border border-input bg-muted/35 px-3 py-2 text-sm text-foreground">
                   {(addressSource === "contact"
                     ? contactAddress
                     : orgAddress) || "—"}
                 </div>
-                <div className="text-xs text-neutral-600">
+                <div className="text-xs text-muted-foreground">
                   Address is restricted to the selected Organization or Contact
                   address.
                 </div>
@@ -656,11 +656,11 @@ export function DeliveryEdit() {
             </div>
 
             <div className="flex flex-col gap-2 md:col-span-2">
-              <label className="text-xs font-medium text-neutral-700">
+              <label className="text-xs font-medium text-foreground">
                 Notes
               </label>
               <textarea
-                className="min-h-24 rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
+                className="min-h-24 rounded-md border border-input bg-card px-3 py-2 text-sm"
                 value={form.notes}
                 onChange={(e) => update({ notes: e.target.value })}
                 disabled={!canEdit || saving}
@@ -672,7 +672,7 @@ export function DeliveryEdit() {
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-base font-semibold">Items</h2>
-                <p className="text-sm text-neutral-600">
+                <p className="text-sm text-muted-foreground">
                   Wig types and quantities.
                 </p>
               </div>
@@ -687,9 +687,9 @@ export function DeliveryEdit() {
               ) : null}
             </div>
 
-            <div className="overflow-x-auto rounded-md border border-neutral-200">
+            <div className="overflow-x-auto rounded-xl border border-border bg-card/80">
               <table className="min-w-full text-left text-sm">
-                <thead className="bg-neutral-50 text-xs uppercase text-neutral-600">
+                <thead className="bg-muted/35 text-xs uppercase text-muted-foreground">
                   <tr>
                     <th className="px-3 py-2">Type</th>
                     <th className="px-3 py-2">Qty</th>
@@ -699,10 +699,13 @@ export function DeliveryEdit() {
                 </thead>
                 <tbody>
                   {items.map((it) => (
-                    <tr key={it.id} className="border-t border-neutral-200">
+                    <tr
+                      key={it.id}
+                      className="border-t border-border/80 hover:bg-muted/20"
+                    >
                       <td className="px-3 py-2">
                         <input
-                          className="w-56 rounded-md border border-neutral-300 bg-white px-2 py-1 text-sm"
+                          className="w-56 rounded-md border border-input bg-card px-2 py-1 text-sm"
                           value={it.wig_type}
                           onChange={(e) =>
                             setItems((prev) =>
@@ -723,7 +726,7 @@ export function DeliveryEdit() {
                         <input
                           type="number"
                           min={1}
-                          className="w-24 rounded-md border border-neutral-300 bg-white px-2 py-1 text-sm"
+                          className="w-24 rounded-md border border-input bg-card px-2 py-1 text-sm"
                           value={it.quantity}
                           onChange={(e) =>
                             setItems((prev) =>
@@ -745,7 +748,7 @@ export function DeliveryEdit() {
                       </td>
                       <td className="px-3 py-2">
                         <input
-                          className="w-full min-w-56 rounded-md border border-neutral-300 bg-white px-2 py-1 text-sm"
+                          className="w-full min-w-56 rounded-md border border-input bg-card px-2 py-1 text-sm"
                           value={it.notes ?? ""}
                           onChange={(e) =>
                             setItems((prev) =>
@@ -780,7 +783,7 @@ export function DeliveryEdit() {
                   {items.length === 0 ? (
                     <tr>
                       <td
-                        className="px-3 py-6 text-center text-sm text-neutral-600"
+                        className="px-3 py-6 text-center text-sm text-muted-foreground"
                         colSpan={4}
                       >
                         No items.
@@ -791,7 +794,7 @@ export function DeliveryEdit() {
               </table>
             </div>
             {isNew ? (
-              <div className="text-xs text-neutral-600">
+              <div className="text-xs text-muted-foreground">
                 Save the delivery to manage items.
               </div>
             ) : null}

@@ -1,6 +1,9 @@
 import { Fragment, useMemo } from "react";
+import { Moon, Sun } from "lucide-react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
+import { useTheme } from "./ThemeProvider";
+import { Button } from "./ui/button";
 import { AppSidebar } from "./app-sidebar";
 import {
   Breadcrumb,
@@ -56,6 +59,7 @@ function buildBreadcrumbs(pathname: string): Crumb[] {
 
 export function AppShell() {
   const { user, role, signOut } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const userName =
     (user?.user_metadata?.full_name as string | undefined) ?? null;
   const userEmail = user?.email ?? null;
@@ -76,8 +80,8 @@ export function AppShell() {
         userAvatarUrl={userAvatarUrl}
         onSignOut={() => void signOut()}
       />
-      <SidebarInset>
-        <header className="flex items-center justify-between border-b px-4 py-3">
+      <SidebarInset className="bg-sidebar/35 text-sidebar-foreground md:border md:border-sidebar-border/60">
+        <header className="flex items-center justify-between border-b border-sidebar-border/70 bg-sidebar/60 px-4 py-3">
           <div className="flex items-center gap-2">
             <SidebarTrigger />
             <Breadcrumb>
@@ -99,10 +103,22 @@ export function AppShell() {
               </BreadcrumbList>
             </Breadcrumb>
           </div>
-          <div />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleTheme}
+            aria-label={
+              theme === "dark"
+                ? "Switch to light theme"
+                : "Switch to dark theme"
+            }
+            title={theme === "dark" ? "Light mode" : "Dark mode"}
+          >
+            {theme === "dark" ? <Sun /> : <Moon />}
+          </Button>
         </header>
 
-        <main className="min-w-0 flex-1 overflow-auto p-4">
+        <main className="min-w-0 flex-1 overflow-auto bg-sidebar/35 p-4">
           <Outlet />
         </main>
       </SidebarInset>
