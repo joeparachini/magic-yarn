@@ -33,6 +33,44 @@ type DeliveryRow = {
   user_profiles?: { full_name: string | null } | null;
 };
 
+type SortKey =
+  | "recipient"
+  | "state"
+  | "chapterLeader"
+  | "requested_date"
+  | "target_delivery_date"
+  | "status"
+  | "shipped_date"
+  | "items";
+
+type SortDir = "asc" | "desc";
+
+const SORT_KEYS: SortKey[] = [
+  "recipient",
+  "state",
+  "chapterLeader",
+  "requested_date",
+  "target_delivery_date",
+  "status",
+  "shipped_date",
+  "items",
+];
+
+function toSortKey(value: string | null): SortKey {
+  if (!value) return "target_delivery_date";
+  if (SORT_KEYS.includes(value as SortKey)) return value as SortKey;
+  return "target_delivery_date";
+}
+
+function toSortDir(value: string | null): SortDir {
+  return value === "asc" ? "asc" : "desc";
+}
+
+function monthKeyFromDate(value: string | null): string | null {
+  if (!value) return null;
+  return value.length >= 7 ? value.slice(0, 7) : null;
+}
+
 const statusOptions: Array<{ label: string; value: DeliveryStatusId | "all" }> = [
   { label: "All", value: "all" },
   ...DELIVERY_STATUS_OPTIONS,
@@ -65,9 +103,13 @@ export function DeliveriesList() {
   const query = searchParams.get("q") ?? "";
   const statusParam = searchParams.get("status");
   const assignedParam = searchParams.get("assigned");
+  const monthParam = searchParams.get("month") ?? "all";
+  const sortKey = toSortKey(searchParams.get("sort"));
+  const sortDir = toSortDir(searchParams.get("dir"));
   const status: DeliveryStatusId | "all" =
     toDeliveryStatusId(statusParam) ?? "all";
   const assigned = assignedParam ?? "all";
+  const month = monthParam;
   const listSearch = searchParams.toString();
 
   const updateSearchParam = (key: string, value: string) => {
@@ -156,10 +198,32 @@ export function DeliveriesList() {
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [rows]);
 
+  const monthOptions = useMemo(() => {
+    const months = new Set<string>();
+
+    for (const row of rows) {
+      const monthKey = monthKeyFromDate(row.target_delivery_date);
+      if (monthKey) months.add(monthKey);
+    }
+
+    return Array.from(months)
+      .sort((a, b) => b.localeCompare(a))
+      .map((value) => ({
+        value,
+        label: new Date(`${value}-01T00:00:00`).toLocaleDateString(undefined, {
+          month: "long",
+          year: "numeric",
+        }),
+      }));
+  }, [rows]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return rows.filter((r) => {
       if (status !== "all" && r.status_id !== status) return false;
+      if (month !== "all" && monthKeyFromDate(r.target_delivery_date) !== month) {
+        return false;
+      }
       if (assigned === "unassigned") {
         if (r.coordinator_id) return false;
       } else if (assigned !== "all" && r.coordinator_id !== assigned) {
@@ -172,7 +236,77 @@ export function DeliveriesList() {
       const haystack = `${recipient} ${recipientState} ${chapterLeader} ${formatDeliveryStatusById(r.status_id)}`.toLowerCase();
       return haystack.includes(q);
     });
-  }, [rows, query, status, assigned]);
+  }, [rows, query, status, assigned, month]);
+
+  const sorted = useMemo(() => {
+    const direction = sortDir === "asc" ? 1 : -1;
+    const withIndex = filtered.map((row, index) => ({ row, index }));
+
+    const compareText = (a: string, b: string) => a.localeCompare(b);
+    const compareNumber = (a: number, b: number) => a - b;
+
+    withIndex.sort((a, b) => {
+      const left = a.row;
+      const right = b.row;
+      let result = 0;
+
+      if (sortKey === "recipient") {
+        result = compareText(left.recipients?.name ?? "", right.recipients?.name ?? "");
+      } else if (sortKey === "state") {
+        result = compareText(left.recipients?.state ?? "", right.recipients?.state ?? "");
+      } else if (sortKey === "chapterLeader") {
+        result = compareText(
+          left.recipients?.user_profiles?.full_name ?? "",
+          right.recipients?.user_profiles?.full_name ?? "",
+        );
+      } else if (sortKey === "requested_date") {
+        result = compareText(left.requested_date ?? "", right.requested_date ?? "");
+      } else if (sortKey === "target_delivery_date") {
+        result = compareText(
+          left.target_delivery_date ?? "",
+          right.target_delivery_date ?? "",
+        );
+      } else if (sortKey === "status") {
+        result = compareText(
+          formatDeliveryStatusById(left.status_id),
+          formatDeliveryStatusById(right.status_id),
+        );
+      } else if (sortKey === "shipped_date") {
+        result = compareText(left.shipped_date ?? "", right.shipped_date ?? "");
+      } else if (sortKey === "items") {
+        result = compareNumber(
+          Number(left.wigs ?? 0) + Number(left.beanies ?? 0),
+          Number(right.wigs ?? 0) + Number(right.beanies ?? 0),
+        );
+      }
+
+      if (result === 0) return a.index - b.index;
+      return result * direction;
+    });
+
+    return withIndex.map((entry) => entry.row);
+  }, [filtered, sortDir, sortKey]);
+
+  const updateSort = (nextKey: SortKey) => {
+    const next = new URLSearchParams(searchParams);
+    const defaultDir =
+      nextKey === "requested_date" ||
+      nextKey === "target_delivery_date" ||
+      nextKey === "shipped_date"
+        ? "desc"
+        : "asc";
+    const nextDir =
+      sortKey === nextKey ? (sortDir === "asc" ? "desc" : "asc") : defaultDir;
+
+    next.set("sort", nextKey);
+    next.set("dir", nextDir);
+    setSearchParams(next, { replace: true });
+  };
+
+  const sortIndicator = (key: SortKey) => {
+    if (sortKey !== key) return "";
+    return sortDir === "asc" ? " ↑" : " ↓";
+  };
 
   return (
     <div className="flex flex-col gap-4 rounded-xl border border-border/70 bg-card/70 p-4 shadow-sm">
@@ -210,50 +344,74 @@ export function DeliveriesList() {
         </div>
       ) : null}
 
-      <div className="flex flex-col gap-2 md:flex-row md:items-center">
-        <input
-          className="w-full max-w-md rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-          placeholder="Search deliveries…"
-          value={query}
-          onChange={(e) => updateSearchParam("q", e.target.value)}
-        />
-        <select
-          className="w-full max-w-xs rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-          value={status === "all" ? "all" : String(status)}
-          onChange={(e) =>
-            updateSearchParam(
-              "status",
-              e.target.value === "all" ? "" : e.target.value,
-            )
-          }
-        >
-          {statusOptions.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-        <select
-          className="w-full max-w-xs rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-          value={assigned}
-          onChange={(e) =>
-            updateSearchParam(
-              "assigned",
-              e.target.value === "all" ? "" : e.target.value,
-            )
-          }
-        >
-          <option value="all">All assigned users</option>
-          <option value="unassigned">Unassigned</option>
-          {assignedOptions.map((opt) => (
-            <option key={opt.id} value={opt.id}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-        <div className="text-xs text-muted-foreground">
-          {filtered.length} shown
+      <div className="flex flex-col gap-2 md:flex-row md:items-end">
+        <div className="flex w-full max-w-md flex-col gap-1">
+          <div className="text-xs text-muted-foreground">Search</div>
+          <input
+            className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+            placeholder="Search deliveries…"
+            value={query}
+            onChange={(e) => updateSearchParam("q", e.target.value)}
+          />
         </div>
+        <div className="flex w-full max-w-xs flex-col gap-1">
+          <div className="text-xs text-muted-foreground">Status</div>
+          <select
+            className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+            value={status === "all" ? "all" : String(status)}
+            onChange={(e) =>
+              updateSearchParam(
+                "status",
+                e.target.value === "all" ? "" : e.target.value,
+              )
+            }
+          >
+            {statusOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex w-full max-w-xs flex-col gap-1">
+          <div className="text-xs text-muted-foreground">Chapter Leader</div>
+          <select
+            className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+            value={assigned}
+            onChange={(e) =>
+              updateSearchParam(
+                "assigned",
+                e.target.value === "all" ? "" : e.target.value,
+              )
+            }
+          >
+            <option value="all">All chapter leaders</option>
+            <option value="unassigned">Unassigned</option>
+            {assignedOptions.map((opt) => (
+              <option key={opt.id} value={opt.id}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex w-full max-w-xs flex-col gap-1">
+          <div className="text-xs text-muted-foreground">Target month</div>
+          <select
+            className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+            value={month}
+            onChange={(e) =>
+              updateSearchParam("month", e.target.value === "all" ? "" : e.target.value)
+            }
+          >
+            <option value="all">All months</option>
+            {monthOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="text-xs text-muted-foreground md:pb-2">{sorted.length} shown</div>
       </div>
 
       {loading ? (
@@ -263,15 +421,77 @@ export function DeliveriesList() {
           <table className="min-w-full text-left text-sm">
             <thead className="bg-muted/35 text-xs uppercase text-muted-foreground">
               <tr>
-                <th className="px-3 py-2">Recipient</th>
-                <th className="px-3 py-2">Delivery state</th>
-                <th className="px-3 py-2">Chapter leader</th>
-                <th className="px-3 py-2">Requested on</th>
-                <th className="px-3 py-2">Target date</th>
-                <th className="px-3 py-2">Status</th>
-                <th className="px-3 py-2">Shipped date</th>
                 <th className="px-3 py-2">
-                  <div>Items</div>
+                  <button
+                    type="button"
+                    className="text-left"
+                    onClick={() => updateSort("recipient")}
+                  >
+                    Recipient{sortIndicator("recipient")}
+                  </button>
+                </th>
+                <th className="px-3 py-2">
+                  <button
+                    type="button"
+                    className="text-left"
+                    onClick={() => updateSort("state")}
+                  >
+                    Delivery state{sortIndicator("state")}
+                  </button>
+                </th>
+                <th className="px-3 py-2">
+                  <button
+                    type="button"
+                    className="text-left"
+                    onClick={() => updateSort("chapterLeader")}
+                  >
+                    Chapter leader{sortIndicator("chapterLeader")}
+                  </button>
+                </th>
+                <th className="px-3 py-2">
+                  <button
+                    type="button"
+                    className="text-left"
+                    onClick={() => updateSort("requested_date")}
+                  >
+                    Requested on{sortIndicator("requested_date")}
+                  </button>
+                </th>
+                <th className="px-3 py-2">
+                  <button
+                    type="button"
+                    className="text-left"
+                    onClick={() => updateSort("target_delivery_date")}
+                  >
+                    Target date{sortIndicator("target_delivery_date")}
+                  </button>
+                </th>
+                <th className="px-3 py-2">
+                  <button
+                    type="button"
+                    className="text-left"
+                    onClick={() => updateSort("status")}
+                  >
+                    Status{sortIndicator("status")}
+                  </button>
+                </th>
+                <th className="px-3 py-2">
+                  <button
+                    type="button"
+                    className="text-left"
+                    onClick={() => updateSort("shipped_date")}
+                  >
+                    Shipped date{sortIndicator("shipped_date")}
+                  </button>
+                </th>
+                <th className="px-3 py-2">
+                  <button
+                    type="button"
+                    className="text-left"
+                    onClick={() => updateSort("items")}
+                  >
+                    <div>Items{sortIndicator("items")}</div>
+                  </button>
                   <div className="text-[10px] font-normal normal-case text-muted-foreground">
                     W | B | T
                   </div>
@@ -279,7 +499,7 @@ export function DeliveriesList() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((r) => (
+              {sorted.map((r) => (
                 <Fragment key={r.id}>
                   <tr className="border-t border-border/80 hover:bg-muted/20">
                     <td className="px-3 py-2">
@@ -343,7 +563,7 @@ export function DeliveriesList() {
                   ) : null}
                 </Fragment>
               ))}
-              {filtered.length === 0 ? (
+              {sorted.length === 0 ? (
                 <tr>
                   <td
                     className="px-3 py-6 text-center text-sm text-muted-foreground"

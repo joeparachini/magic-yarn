@@ -16,7 +16,6 @@ type MonthlyDeliverySummary = {
   awaitingConfirmation: number;
   approved: number;
   completed: number;
-  cancelled: number;
 };
 
 async function hasPermission(permission: "deliveries.read"): Promise<boolean> {
@@ -89,7 +88,10 @@ export function Dashboard() {
       .not("target_delivery_date", "is", null)
       .gte("target_delivery_date", yearStart)
       .lte("target_delivery_date", yearEnd)
-      .in("status_id", [...DELIVERY_STATUS_IDS]);
+      .in(
+        "status_id",
+        DELIVERY_STATUS_IDS.filter((statusId) => statusId !== 4),
+      );
 
     if (error) throw error;
 
@@ -107,7 +109,6 @@ export function Dashboard() {
         awaitingConfirmation: 0,
         approved: 0,
         completed: 0,
-        cancelled: 0,
       };
     });
 
@@ -123,8 +124,6 @@ export function Dashboard() {
       summary.beanies += Number(row.beanies ?? 0);
       if (row.status_id === 3) {
         summary.completed += 1;
-      } else if (row.status_id === 4) {
-        summary.cancelled += 1;
       } else if (row.status_id === 2) {
         summary.approved += 1;
       } else {
@@ -226,10 +225,6 @@ export function Dashboard() {
 
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <span className="inline-flex items-center gap-1">
-                <span className="h-2 w-2 rounded-full bg-destructive" />
-                {DELIVERY_STATUS_LABELS_BY_ID[4]}
-              </span>
-              <span className="inline-flex items-center gap-1">
                 <span className="h-2 w-2 rounded-full bg-chart-4" />
                 {DELIVERY_STATUS_LABELS_BY_ID[1]}
               </span>
@@ -287,15 +282,7 @@ export function Dashboard() {
                   </div>
                 </div>
 
-                <div className="mt-3 grid grid-cols-4 gap-2 text-center">
-                  <div className="flex h-full flex-col items-center rounded-md bg-destructive/10 px-2 py-2 text-destructive">
-                    <div className="text-lg font-semibold leading-none">
-                      {month.cancelled}
-                    </div>
-                    <div className="mt-1 min-h-[2.25em] text-[11px] leading-tight">
-                      {DELIVERY_STATUS_LABELS_BY_ID[4]}
-                    </div>
-                  </div>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
                   <div className="flex h-full flex-col items-center rounded-md bg-chart-4/15 px-2 py-2 text-chart-4">
                     <div className="text-lg font-semibold leading-none">
                       {month.awaitingConfirmation}
