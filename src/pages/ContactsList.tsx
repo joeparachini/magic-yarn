@@ -104,7 +104,9 @@ export function ContactsList() {
             Refresh
           </Button>
           {canEdit ? (
-            <Link to={listSearch ? `/contacts/new?${listSearch}` : "/contacts/new"}>
+            <Link
+              to={listSearch ? `/contacts/new?${listSearch}` : "/contacts/new"}
+            >
               <Button>New contact</Button>
             </Link>
           ) : null}

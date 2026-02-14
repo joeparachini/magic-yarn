@@ -275,7 +275,9 @@ export function DeliveryEdit() {
 
       // Best-effort detection of address source for existing deliveries
       const existingContactId = ((data as any).contact_id ?? "") as string;
-      const matchedContact = orgContacts.find((c) => c.id === existingContactId);
+      const matchedContact = orgContacts.find(
+        (c) => c.id === existingContactId,
+      );
       if (existingContactId && matchedContact) {
         const contact = ((
           await supabase
@@ -574,7 +576,8 @@ export function DeliveryEdit() {
                 </div>
               ) : !form.contact_id ? (
                 <div className="text-xs text-muted-foreground">
-                  No contact selected. This delivery will remain organization-level.
+                  No contact selected. This delivery will remain
+                  organization-level.
                 </div>
               ) : null}
             </div>

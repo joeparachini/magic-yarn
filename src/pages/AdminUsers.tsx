@@ -154,7 +154,11 @@ export function AdminUsers() {
     setSavingId(null);
   };
 
-  const toggleRegion = (userId: string, regionCode: string, checked: boolean) => {
+  const toggleRegion = (
+    userId: string,
+    regionCode: string,
+    checked: boolean,
+  ) => {
     const current = new Set(regionsByUserId[userId] ?? []);
     if (checked) current.add(regionCode);
     else current.delete(regionCode);
@@ -256,8 +260,9 @@ export function AdminUsers() {
                     ) : (
                       <div className="grid grid-cols-1 gap-1">
                         {regions.map((region) => {
-                          const checked =
-                            (regionsByUserId[r.id] ?? []).includes(region.code);
+                          const checked = (
+                            regionsByUserId[r.id] ?? []
+                          ).includes(region.code);
                           return (
                             <label
                               key={`${r.id}:${region.code}`}

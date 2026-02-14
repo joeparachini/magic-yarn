@@ -88,7 +88,9 @@ export function OrganizationsList() {
     const q = query.trim().toLowerCase();
     if (!q) return rows;
     return rows.filter((r) => {
-      const regionName = r.region_code ? regionsByCode[r.region_code] ?? "" : "";
+      const regionName = r.region_code
+        ? (regionsByCode[r.region_code] ?? "")
+        : "";
       const haystack =
         `${r.name} ${r.city ?? ""} ${r.state ?? ""} ${regionName}`.toLowerCase();
       return haystack.includes(q);
@@ -179,7 +181,9 @@ export function OrganizationsList() {
                   </td>
                   <td className="px-3 py-2">{r.type}</td>
                   <td className="px-3 py-2">
-                    {r.region_code ? regionsByCode[r.region_code] ?? r.region_code : "—"}
+                    {r.region_code
+                      ? (regionsByCode[r.region_code] ?? r.region_code)
+                      : "—"}
                   </td>
                   <td className="px-3 py-2">
                     {[r.city, r.state].filter(Boolean).join(", ") || "—"}

@@ -150,7 +150,11 @@ export function DeliveriesList() {
             Refresh
           </Button>
           {canEdit ? (
-            <Link to={listSearch ? `/deliveries/new?${listSearch}` : "/deliveries/new"}>
+            <Link
+              to={
+                listSearch ? `/deliveries/new?${listSearch}` : "/deliveries/new"
+              }
+            >
               <Button>New delivery</Button>
             </Link>
           ) : null}
