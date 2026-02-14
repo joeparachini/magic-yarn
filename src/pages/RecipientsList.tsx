@@ -4,17 +4,28 @@ import { useAuth } from "../auth/AuthProvider";
 import { Button } from "../components/ui/button";
 import { supabase } from "../lib/supabaseClient";
 
-type RecipientType = "hospital" | "clinic" | "cancer_center" | "other";
+type RecipientType =
+  | "hospital"
+  | "clinic"
+  | "cancer_center"
+  | "individual"
+  | "other";
 
 type RecipientRow = {
   id: string;
   name: string;
   type: RecipientType;
-  last_correspondence_date: string | null;
   shipment_frequency_months: number | null;
   city: string | null;
   state: string | null;
   updated_at: string;
+};
+
+type CorrespondenceSummaryRow = {
+  recipient_id: string;
+  correspondence_date: string;
+  note: string;
+  created_at: string;
 };
 
 export function RecipientsList() {
@@ -23,8 +34,13 @@ export function RecipientsList() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [rows, setRows] = useState<RecipientRow[]>([]);
+  const [latestCorrespondenceByRecipient, setLatestCorrespondenceByRecipient] =
+    useState<Record<string, CorrespondenceSummaryRow>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [correspondenceWarning, setCorrespondenceWarning] = useState<
+    string | null
+  >(null);
   const query = searchParams.get("q") ?? "";
   const listSearch = searchParams.toString();
 
@@ -45,18 +61,48 @@ export function RecipientsList() {
     const recipientsRes = await supabase
       .from("recipients")
       .select(
-        "id, name, type, last_correspondence_date, shipment_frequency_months, city, state, updated_at",
+        "id, name, type, shipment_frequency_months, city, state, updated_at",
       )
       .order("name", { ascending: true });
 
     if (recipientsRes.error) {
-      setError(recipientsRes.error?.message ?? "Failed to load recipients.");
+      setError(recipientsRes.error.message ?? "Failed to load recipients.");
       setRows([]);
       setLoading(false);
       return;
     }
 
-    setRows((recipientsRes.data ?? []) as RecipientRow[]);
+    const loadedRows = (recipientsRes.data ?? []) as RecipientRow[];
+    setRows(loadedRows);
+
+    const correspondenceRes = await supabase
+      .from("recipient_correspondence")
+      .select("recipient_id, correspondence_date, note, created_at")
+      .order("correspondence_date", { ascending: false })
+      .order("created_at", { ascending: false });
+
+    if (correspondenceRes.error) {
+      if ((correspondenceRes.error as { code?: string }).code !== "42P01") {
+        setCorrespondenceWarning(
+          correspondenceRes.error.message ??
+            "Could not load correspondence summaries.",
+        );
+      }
+      setLatestCorrespondenceByRecipient({});
+      setLoading(false);
+      return;
+    }
+
+    setCorrespondenceWarning(null);
+    const latestByRecipient: Record<string, CorrespondenceSummaryRow> = {};
+    for (const row of (correspondenceRes.data ??
+      []) as CorrespondenceSummaryRow[]) {
+      if (!latestByRecipient[row.recipient_id]) {
+        latestByRecipient[row.recipient_id] = row;
+      }
+    }
+
+    setLatestCorrespondenceByRecipient(latestByRecipient);
     setLoading(false);
   };
 
@@ -80,7 +126,7 @@ export function RecipientsList() {
         <div>
           <h1 className="text-xl font-semibold">Recipients</h1>
           <p className="text-sm text-muted-foreground">
-            Hospitals, clinics, and other delivery destinations.
+            Hospitals, clinics, individuals, and other delivery destinations.
           </p>
         </div>
 
@@ -110,6 +156,12 @@ export function RecipientsList() {
         </div>
       ) : null}
 
+      {correspondenceWarning ? (
+        <div className="rounded-md border border-border bg-muted/35 p-3 text-sm text-foreground">
+          {correspondenceWarning}
+        </div>
+      ) : null}
+
       <div className="flex items-center gap-2">
         <input
           className="w-full max-w-md rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
@@ -131,9 +183,9 @@ export function RecipientsList() {
               <tr>
                 <th className="px-3 py-2">Name</th>
                 <th className="px-3 py-2">Type</th>
-                <th className="px-3 py-2">Last correspondence</th>
                 <th className="px-3 py-2">Frequency</th>
                 <th className="px-3 py-2">Location</th>
+                <th className="px-3 py-2">Latest correspondence</th>
                 <th className="px-3 py-2">Updated</th>
               </tr>
             </thead>
@@ -157,19 +209,29 @@ export function RecipientsList() {
                   </td>
                   <td className="px-3 py-2">{r.type}</td>
                   <td className="px-3 py-2">
-                    {r.last_correspondence_date
-                      ? new Date(
-                          r.last_correspondence_date,
-                        ).toLocaleDateString()
-                      : "—"}
-                  </td>
-                  <td className="px-3 py-2">
                     {r.shipment_frequency_months
                       ? `Every ${r.shipment_frequency_months} month${r.shipment_frequency_months === 1 ? "" : "s"}`
                       : "—"}
                   </td>
                   <td className="px-3 py-2">
                     {[r.city, r.state].filter(Boolean).join(", ") || "—"}
+                  </td>
+                  <td className="px-3 py-2">
+                    {latestCorrespondenceByRecipient[r.id] ? (
+                      <div className="max-w-72">
+                        <div className="text-xs text-muted-foreground">
+                          {new Date(
+                            latestCorrespondenceByRecipient[r.id]
+                              .correspondence_date,
+                          ).toLocaleDateString()}
+                        </div>
+                        <div className="truncate">
+                          {latestCorrespondenceByRecipient[r.id].note}
+                        </div>
+                      </div>
+                    ) : (
+                      "—"
+                    )}
                   </td>
                   <td className="px-3 py-2 text-muted-foreground">
                     {new Date(r.updated_at).toLocaleDateString()}

@@ -1,48 +1,25 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "../components/ui/button";
+import {
+  DELIVERY_STATUS_IDS,
+  DELIVERY_STATUS_LABELS_BY_ID,
+} from "../lib/deliveryStatus";
 import { supabase } from "../lib/supabaseClient";
 
-type DeliveryStatus = "pending" | "scheduled" | "completed" | "cancelled";
-
-type RecentDeliveryRow = {
-  id: string;
-  status: DeliveryStatus;
-  delivery_date: string | null;
-  updated_at: string;
-  organizations?: { name: string } | null;
-  contacts?: { first_name: string; last_name: string } | null;
+type MonthlyDeliverySummary = {
+  key: string;
+  label: string;
+  total: number;
+  wigs: number;
+  beanies: number;
+  awaitingConfirmation: number;
+  approved: number;
+  completed: number;
+  cancelled: number;
 };
 
-type Permission =
-  | "organizations.read"
-  | "contacts.read"
-  | "deliveries.read"
-  | "delivery_items.read";
-
-function MetricCard({
-  title,
-  value,
-  hint,
-}: {
-  title: string;
-  value: string;
-  hint?: string;
-}) {
-  return (
-    <div className="rounded-xl border border-border/70 bg-card/80 p-4">
-      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        {title}
-      </div>
-      <div className="mt-1 text-2xl font-semibold">{value}</div>
-      {hint ? (
-        <div className="mt-1 text-xs text-muted-foreground">{hint}</div>
-      ) : null}
-    </div>
-  );
-}
-
-async function hasPermission(permission: Permission): Promise<boolean> {
+async function hasPermission(permission: "deliveries.read"): Promise<boolean> {
   const { data, error } = await supabase.rpc("current_user_has_permission", {
     p: permission,
   });
@@ -53,201 +30,166 @@ async function hasPermission(permission: Permission): Promise<boolean> {
 export function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const [canReadOrgs, setCanReadOrgs] = useState(false);
-  const [canReadContacts, setCanReadContacts] = useState(false);
   const [canReadDeliveries, setCanReadDeliveries] = useState(false);
-  const [canReadItems, setCanReadItems] = useState(false);
 
-  const [orgCount, setOrgCount] = useState<number | null>(null);
-  const [contactCount, setContactCount] = useState<number | null>(null);
-  const [deliveryCount, setDeliveryCount] = useState<number | null>(null);
-  const [statusCounts, setStatusCounts] = useState<Record<
-    DeliveryStatus,
-    number
-  > | null>(null);
-  const [upcomingCount, setUpcomingCount] = useState<number | null>(null);
-  const [recentDeliveries, setRecentDeliveries] = useState<RecentDeliveryRow[]>(
-    [],
-  );
+  const currentYear = new Date().getFullYear();
+  const [availableYears, setAvailableYears] = useState<number[]>([currentYear]);
+  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [monthlySummaries, setMonthlySummaries] = useState<
+    MonthlyDeliverySummary[]
+  >([]);
 
-  const load = async () => {
+  const loadAvailableYears = async (): Promise<number[]> => {
+    const [minResult, maxResult] = await Promise.all([
+      supabase
+        .from("deliveries")
+        .select("target_delivery_date")
+        .not("target_delivery_date", "is", null)
+        .order("target_delivery_date", { ascending: true })
+        .limit(1),
+      supabase
+        .from("deliveries")
+        .select("target_delivery_date")
+        .not("target_delivery_date", "is", null)
+        .order("target_delivery_date", { ascending: false })
+        .limit(1),
+    ]);
+
+    if (minResult.error) throw minResult.error;
+    if (maxResult.error) throw maxResult.error;
+
+    const minDate = minResult.data?.[0]?.target_delivery_date as
+      | string
+      | undefined;
+    const maxDate = maxResult.data?.[0]?.target_delivery_date as
+      | string
+      | undefined;
+
+    const minYear = minDate ? Number(minDate.slice(0, 4)) : currentYear;
+    const maxYear = maxDate ? Number(maxDate.slice(0, 4)) : currentYear;
+
+    const startYear = Number.isFinite(minYear) ? minYear : currentYear;
+    const endYear = Number.isFinite(maxYear) ? maxYear : currentYear;
+
+    const years: number[] = [];
+    for (let year = endYear; year >= startYear; year -= 1) {
+      years.push(year);
+    }
+
+    return years.length > 0 ? years : [currentYear];
+  };
+
+  const loadMonthlySummaries = async (year: number) => {
+    const yearStart = `${year}-01-01`;
+    const yearEnd = `${year}-12-31`;
+
+    const { data, error } = await supabase
+      .from("deliveries")
+      .select("target_delivery_date,status_id,wigs,beanies")
+      .not("target_delivery_date", "is", null)
+      .gte("target_delivery_date", yearStart)
+      .lte("target_delivery_date", yearEnd)
+      .in("status_id", [...DELIVERY_STATUS_IDS]);
+
+    if (error) throw error;
+
+    const months = Array.from({ length: 12 }, (_, monthIndex) => {
+      const monthDate = new Date(year, monthIndex, 1);
+      const month = String(monthIndex + 1).padStart(2, "0");
+      return {
+        key: `${year}-${month}`,
+        label: monthDate.toLocaleDateString(undefined, {
+          month: "long",
+        }),
+        total: 0,
+        wigs: 0,
+        beanies: 0,
+        awaitingConfirmation: 0,
+        approved: 0,
+        completed: 0,
+        cancelled: 0,
+      };
+    });
+
+    const byKey = new Map(months.map((month) => [month.key, month]));
+
+    for (const row of data ?? []) {
+      const monthKey = String(row.target_delivery_date).slice(0, 7);
+      const summary = byKey.get(monthKey);
+      if (!summary) continue;
+
+      summary.total += 1;
+      summary.wigs += Number(row.wigs ?? 0);
+      summary.beanies += Number(row.beanies ?? 0);
+      if (row.status_id === 3) {
+        summary.completed += 1;
+      } else if (row.status_id === 4) {
+        summary.cancelled += 1;
+      } else if (row.status_id === 2) {
+        summary.approved += 1;
+      } else {
+        summary.awaitingConfirmation += 1;
+      }
+    }
+
+    setMonthlySummaries(months);
+  };
+
+  const load = async (year: number, refreshYears: boolean) => {
     setLoading(true);
     setError(null);
 
     try {
-      const [orgsOk, contactsOk, deliveriesOk, itemsOk] = await Promise.all([
-        hasPermission("organizations.read"),
-        hasPermission("contacts.read"),
-        hasPermission("deliveries.read"),
-        hasPermission("delivery_items.read"),
-      ]);
-
-      setCanReadOrgs(orgsOk);
-      setCanReadContacts(contactsOk);
+      const deliveriesOk = await hasPermission("deliveries.read");
       setCanReadDeliveries(deliveriesOk);
-      setCanReadItems(itemsOk);
 
-      const tasks: Array<Promise<void>> = [];
+      if (!deliveriesOk) {
+        setMonthlySummaries([]);
+        setLoading(false);
+        return;
+      }
 
-      if (orgsOk) {
-        tasks.push(
-          (async () => {
-            const { count, error } = await supabase
-              .from("organizations")
-              .select("id", { count: "exact", head: true });
-            if (error) throw error;
-            setOrgCount(count ?? 0);
-          })(),
-        );
+      if (refreshYears) {
+        const years = await loadAvailableYears();
+        setAvailableYears(years);
+
+        const nextYear = years.includes(year) ? year : years[0];
+        if (nextYear !== selectedYear) {
+          setSelectedYear(nextYear);
+        }
+
+        await loadMonthlySummaries(nextYear);
       } else {
-        setOrgCount(null);
+        await loadMonthlySummaries(year);
       }
-
-      if (contactsOk) {
-        tasks.push(
-          (async () => {
-            const { count, error } = await supabase
-              .from("contacts")
-              .select("id", { count: "exact", head: true });
-            if (error) throw error;
-            setContactCount(count ?? 0);
-          })(),
-        );
-      } else {
-        setContactCount(null);
-      }
-
-      if (deliveriesOk) {
-        tasks.push(
-          (async () => {
-            const { count, error } = await supabase
-              .from("deliveries")
-              .select("id", { count: "exact", head: true });
-            if (error) throw error;
-            setDeliveryCount(count ?? 0);
-          })(),
-        );
-
-        tasks.push(
-          (async () => {
-            const statuses: DeliveryStatus[] = [
-              "pending",
-              "scheduled",
-              "completed",
-              "cancelled",
-            ];
-            const results = await Promise.all(
-              statuses.map(async (s) => {
-                const { count, error } = await supabase
-                  .from("deliveries")
-                  .select("id", { count: "exact", head: true })
-                  .eq("status", s);
-                if (error) throw error;
-                return [s, count ?? 0] as const;
-              }),
-            );
-            setStatusCounts(
-              Object.fromEntries(results) as Record<DeliveryStatus, number>,
-            );
-          })(),
-        );
-
-        tasks.push(
-          (async () => {
-            const now = new Date();
-            const in14 = new Date(now);
-            in14.setDate(in14.getDate() + 14);
-
-            const { count, error } = await supabase
-              .from("deliveries")
-              .select("id", { count: "exact", head: true })
-              .in("status", ["pending", "scheduled"])
-              .gte("delivery_date", now.toISOString().slice(0, 10))
-              .lte("delivery_date", in14.toISOString().slice(0, 10));
-
-            if (error) throw error;
-            setUpcomingCount(count ?? 0);
-          })(),
-        );
-
-        tasks.push(
-          (async () => {
-            const { data, error } = await supabase
-              .from("deliveries")
-              .select(
-                "id, status, delivery_date, updated_at, organizations(name), contacts(first_name,last_name)",
-              )
-              .order("updated_at", { ascending: false })
-              .limit(8);
-
-            if (error) throw error;
-
-            const normalized = (data ?? []).map((row: any) => {
-              const org = Array.isArray(row.organizations)
-                ? row.organizations[0]
-                : row.organizations;
-              const contact = Array.isArray(row.contacts)
-                ? row.contacts[0]
-                : row.contacts;
-              return {
-                ...row,
-                organizations: org ? { name: org.name as string } : null,
-                contacts: contact
-                  ? {
-                      first_name: contact.first_name as string,
-                      last_name: contact.last_name as string,
-                    }
-                  : null,
-              };
-            });
-
-            setRecentDeliveries(normalized as unknown as RecentDeliveryRow[]);
-          })(),
-        );
-      } else {
-        setDeliveryCount(null);
-        setStatusCounts(null);
-        setUpcomingCount(null);
-        setRecentDeliveries([]);
-      }
-
-      if (!itemsOk) {
-        setCanReadItems(false);
-      }
-
-      await Promise.all(tasks);
     } catch (e: any) {
-      setError(e?.message ?? "Failed to load dashboard metrics");
+      setError(e?.message ?? "Failed to load monthly deliveries");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    void load();
+    void load(selectedYear, true);
   }, []);
 
-  const pending = statusCounts?.pending ?? null;
-  const scheduled = statusCounts?.scheduled ?? null;
-
-  const deliveryHint = useMemo(() => {
-    if (!statusCounts) return undefined;
-    return `Pending: ${statusCounts.pending} • Scheduled: ${statusCounts.scheduled} • Completed: ${statusCounts.completed}`;
-  }, [statusCounts]);
+  const onYearChange = (year: number) => {
+    setSelectedYear(year);
+    void load(year, false);
+  };
 
   return (
-    <div className="flex flex-col gap-6 rounded-xl border border-border/70 bg-card/70 p-4 shadow-sm">
+    <div className="flex flex-col gap-4 rounded-xl border border-border/70 bg-card/70 p-4 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold">Dashboard</h1>
+          <h1 className="text-xl font-semibold">Monthly deliveries</h1>
           <p className="text-sm text-muted-foreground">
-            Quick overview and recent updates.
+            Delivery totals and status breakdown by month.
           </p>
         </div>
         <Button
           variant="secondary"
-          onClick={() => void load()}
+          onClick={() => void load(selectedYear, true)}
           disabled={loading}
         >
           Refresh
@@ -260,144 +202,134 @@ export function Dashboard() {
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard
-          title="Organizations"
-          value={
-            canReadOrgs ? (orgCount ?? (loading ? "…" : "0")).toString() : "—"
-          }
-          hint={canReadOrgs ? "Total organizations" : "No access"}
-        />
-        <MetricCard
-          title="Contacts"
-          value={
-            canReadContacts
-              ? (contactCount ?? (loading ? "…" : "0")).toString()
-              : "—"
-          }
-          hint={canReadContacts ? "Total contacts" : "No access"}
-        />
-        <MetricCard
-          title="Deliveries"
-          value={
-            canReadDeliveries
-              ? (deliveryCount ?? (loading ? "…" : "0")).toString()
-              : "—"
-          }
-          hint={canReadDeliveries ? deliveryHint : "No access"}
-        />
-        <MetricCard
-          title="Next 14 Days"
-          value={
-            canReadDeliveries
-              ? (upcomingCount ?? (loading ? "…" : "0")).toString()
-              : "—"
-          }
-          hint={canReadDeliveries ? "Pending + scheduled" : "No access"}
-        />
-      </div>
-
       {canReadDeliveries ? (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <div className="rounded-xl border border-border bg-card/80 p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-sm font-semibold">At a glance</div>
-                <div className="text-xs text-muted-foreground">By status</div>
-              </div>
-              <Link className="text-sm underline" to="/deliveries">
-                View all
-              </Link>
+        <>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2 text-sm">
+              <label className="text-muted-foreground" htmlFor="dashboard-year">
+                Year
+              </label>
+              <select
+                id="dashboard-year"
+                className="w-36 rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                value={selectedYear}
+                onChange={(e) => onYearChange(Number(e.target.value))}
+                disabled={loading}
+              >
+                {availableYears.map((year) => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
+              </select>
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <MetricCard
-                title="Pending"
-                value={pending === null ? "—" : pending.toString()}
-              />
-              <MetricCard
-                title="Scheduled"
-                value={scheduled === null ? "—" : scheduled.toString()}
-              />
-              <MetricCard
-                title="Completed"
-                value={statusCounts ? statusCounts.completed.toString() : "—"}
-              />
-              <MetricCard
-                title="Cancelled"
-                value={statusCounts ? statusCounts.cancelled.toString() : "—"}
-              />
+
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full bg-destructive" />
+                {DELIVERY_STATUS_LABELS_BY_ID[4]}
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full bg-chart-4" />
+                {DELIVERY_STATUS_LABELS_BY_ID[1]}
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full bg-chart-1" />
+                {DELIVERY_STATUS_LABELS_BY_ID[2]}
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full bg-chart-2" />
+                {DELIVERY_STATUS_LABELS_BY_ID[3]}
+              </span>
             </div>
           </div>
 
-          <div className="rounded-xl border border-border bg-card/80 p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-sm font-semibold">Recent deliveries</div>
-                <div className="text-xs text-muted-foreground">
-                  Last updated
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {monthlySummaries.map((month) => (
+              <div
+                key={month.key}
+                className="rounded-lg border border-border/80 bg-background/70 p-4"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-sm font-medium">{month.label}</div>
+                  <Link
+                    className="text-xs underline"
+                    to={`/deliveries?month=${month.key}`}
+                  >
+                    View
+                  </Link>
+                </div>
+
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-md bg-muted/30 px-2 py-2">
+                    <div className="text-4xl font-semibold leading-none">
+                      {month.total}
+                    </div>
+                    <div className="mt-1 text-[11px] text-muted-foreground">
+                      Total deliveries
+                    </div>
+                  </div>
+                  <div className="rounded-md bg-muted/30 px-2 py-2">
+                    <div className="text-4xl font-semibold leading-none">
+                      {month.wigs}
+                    </div>
+                    <div className="mt-1 text-[11px] text-muted-foreground">
+                      Wigs
+                    </div>
+                  </div>
+                  <div className="rounded-md bg-muted/30 px-2 py-2">
+                    <div className="text-4xl font-semibold leading-none">
+                      {month.beanies}
+                    </div>
+                    <div className="mt-1 text-[11px] text-muted-foreground">
+                      Beanies
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-3 grid grid-cols-4 gap-2 text-center">
+                  <div className="flex h-full flex-col items-center rounded-md bg-destructive/10 px-2 py-2 text-destructive">
+                    <div className="text-lg font-semibold leading-none">
+                      {month.cancelled}
+                    </div>
+                    <div className="mt-1 min-h-[2.25em] text-[11px] leading-tight">
+                      {DELIVERY_STATUS_LABELS_BY_ID[4]}
+                    </div>
+                  </div>
+                  <div className="flex h-full flex-col items-center rounded-md bg-chart-4/15 px-2 py-2 text-chart-4">
+                    <div className="text-lg font-semibold leading-none">
+                      {month.awaitingConfirmation}
+                    </div>
+                    <div className="mt-1 min-h-[2.25em] text-[11px] leading-tight">
+                      {DELIVERY_STATUS_LABELS_BY_ID[1]}
+                    </div>
+                  </div>
+                  <div className="flex h-full flex-col items-center rounded-md bg-chart-1/15 px-2 py-2 text-chart-1">
+                    <div className="text-lg font-semibold leading-none">
+                      {month.approved}
+                    </div>
+                    <div className="mt-1 min-h-[2.25em] text-[11px] leading-tight">
+                      {DELIVERY_STATUS_LABELS_BY_ID[2]}
+                    </div>
+                  </div>
+                  <div className="flex h-full flex-col items-center rounded-md bg-chart-2/15 px-2 py-2 text-chart-2">
+                    <div className="text-lg font-semibold leading-none">
+                      {month.completed}
+                    </div>
+                    <div className="mt-1 min-h-[2.25em] text-[11px] leading-tight">
+                      {DELIVERY_STATUS_LABELS_BY_ID[3]}
+                    </div>
+                  </div>
                 </div>
               </div>
-              <Link className="text-sm underline" to="/deliveries">
-                View all
-              </Link>
-            </div>
-            <div className="mt-3 overflow-x-auto">
-              <table className="min-w-full text-left text-sm">
-                <thead className="text-xs uppercase text-muted-foreground">
-                  <tr className="border-b border-border">
-                    <th className="py-2 pr-3">Date</th>
-                    <th className="py-2 pr-3">Status</th>
-                    <th className="py-2 pr-3">Organization</th>
-                    <th className="py-2 pr-3">Contact</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentDeliveries.map((d) => (
-                    <tr key={d.id} className="border-b border-border/70">
-                      <td className="py-2 pr-3">
-                        <Link className="underline" to={`/deliveries/${d.id}`}>
-                          {d.delivery_date
-                            ? new Date(d.delivery_date).toLocaleDateString()
-                            : "—"}
-                        </Link>
-                      </td>
-                      <td className="py-2 pr-3">{d.status}</td>
-                      <td className="py-2 pr-3">
-                        {d.organizations?.name ?? "—"}
-                      </td>
-                      <td className="py-2 pr-3">
-                        {d.contacts
-                          ? `${d.contacts.last_name}, ${d.contacts.first_name}`
-                          : "—"}
-                      </td>
-                    </tr>
-                  ))}
-                  {recentDeliveries.length === 0 ? (
-                    <tr>
-                      <td
-                        className="py-6 text-center text-sm text-muted-foreground"
-                        colSpan={4}
-                      >
-                        No deliveries yet.
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
+            ))}
           </div>
-        </div>
+        </>
       ) : (
         <div className="rounded-xl border border-border bg-card/80 p-4 text-sm text-muted-foreground">
           You don’t have permission to view delivery metrics.
         </div>
       )}
-
-      {!canReadItems ? (
-        <div className="text-xs text-muted-foreground">
-          Delivery item metrics are hidden (no permission).
-        </div>
-      ) : null}
     </div>
   );
 }

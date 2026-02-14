@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import type { Role } from "../auth/types";
@@ -13,9 +13,14 @@ type DeliveryContactSlot = "primary" | "secondary";
 
 type AssociatedDeliveryRow = {
   id: string;
+  requested_date: string | null;
   target_delivery_date: string | null;
+  shipped_date: string | null;
   status_id: DeliveryStatusId | null;
   recipient_contact_slot: DeliveryContactSlot | null;
+  wigs: number | null;
+  beanies: number | null;
+  notes: string | null;
   updated_at: string;
   recipients?: {
     primary_contact_first_name: string | null;
@@ -26,7 +31,20 @@ type AssociatedDeliveryRow = {
   user_profiles?: { full_name: string | null } | null;
 };
 
-type RecipientType = "hospital" | "clinic" | "cancer_center" | "other";
+type CorrespondenceEntryRow = {
+  id: string;
+  recipient_id: string;
+  correspondence_date: string;
+  note: string;
+  created_at: string;
+};
+
+type RecipientType =
+  | "hospital"
+  | "clinic"
+  | "cancer_center"
+  | "individual"
+  | "other";
 
 type RecipientFormState = {
   name: string;
@@ -62,6 +80,7 @@ const recipientTypes: RecipientType[] = [
   "hospital",
   "clinic",
   "cancer_center",
+  "individual",
   "other",
 ];
 
@@ -99,6 +118,14 @@ function canEditDeliveries(role: Role | null) {
   );
 }
 
+function statusClassName(statusId: DeliveryStatusId | null) {
+  if (statusId === 4) return "bg-destructive/10 text-destructive";
+  if (statusId === 1) return "bg-chart-4/15 text-chart-4";
+  if (statusId === 2) return "bg-chart-1/15 text-chart-1";
+  if (statusId === 3) return "bg-chart-2/15 text-chart-2";
+  return "bg-muted text-muted-foreground";
+}
+
 export function RecipientEdit() {
   const { id } = useParams();
   const isNew = !id;
@@ -126,6 +153,21 @@ export function RecipientEdit() {
   const [associatedDeliveriesError, setAssociatedDeliveriesError] = useState<
     string | null
   >(null);
+
+  const [correspondenceRows, setCorrespondenceRows] = useState<
+    CorrespondenceEntryRow[]
+  >([]);
+  const [correspondenceLoading, setCorrespondenceLoading] = useState(false);
+  const [correspondenceSaving, setCorrespondenceSaving] = useState(false);
+  const [correspondenceError, setCorrespondenceError] = useState<string | null>(
+    null,
+  );
+  const [isCorrespondenceBackendReady, setIsCorrespondenceBackendReady] =
+    useState(true);
+  const [newCorrespondenceDate, setNewCorrespondenceDate] = useState(
+    new Date().toISOString().slice(0, 10),
+  );
+  const [newCorrespondenceNote, setNewCorrespondenceNote] = useState("");
 
   const title = useMemo(
     () => (isNew ? "New recipient" : "Edit recipient"),
@@ -220,7 +262,7 @@ export function RecipientEdit() {
     const { data, error } = await supabase
       .from("deliveries")
       .select(
-        "id, target_delivery_date, status_id, recipient_contact_slot, updated_at, recipients(primary_contact_first_name,primary_contact_last_name,secondary_contact_first_name,secondary_contact_last_name), user_profiles(full_name)",
+        "id, requested_date, target_delivery_date, shipped_date, status_id, recipient_contact_slot, wigs, beanies, notes, updated_at, recipients(primary_contact_first_name,primary_contact_last_name,secondary_contact_first_name,secondary_contact_last_name), user_profiles(full_name)",
       )
       .eq("recipient_id", id)
       .order("target_delivery_date", { ascending: false, nullsFirst: false })
@@ -270,6 +312,43 @@ export function RecipientEdit() {
   useEffect(() => {
     if (isNew) return;
     void loadAssociatedDeliveries();
+  }, [id, isNew]);
+
+  const loadCorrespondenceHistory = async () => {
+    if (!id) return;
+
+    setCorrespondenceLoading(true);
+    setCorrespondenceError(null);
+
+    const { data, error } = await supabase
+      .from("recipient_correspondence")
+      .select("id, recipient_id, correspondence_date, note, created_at")
+      .eq("recipient_id", id)
+      .order("correspondence_date", { ascending: false })
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      if ((error as { code?: string }).code === "42P01") {
+        setIsCorrespondenceBackendReady(false);
+        setCorrespondenceRows([]);
+        setCorrespondenceLoading(false);
+        return;
+      }
+
+      setCorrespondenceError(error.message);
+      setCorrespondenceRows([]);
+      setCorrespondenceLoading(false);
+      return;
+    }
+
+    setIsCorrespondenceBackendReady(true);
+    setCorrespondenceRows((data ?? []) as CorrespondenceEntryRow[]);
+    setCorrespondenceLoading(false);
+  };
+
+  useEffect(() => {
+    if (isNew) return;
+    void loadCorrespondenceHistory();
   }, [id, isNew]);
 
   const update = (patch: Partial<RecipientFormState>) =>
@@ -352,6 +431,45 @@ export function RecipientEdit() {
     }
 
     setSaving(false);
+  };
+
+  const addCorrespondenceEntry = async () => {
+    if (!canEdit || !id || !newCorrespondenceDate) return;
+
+    const trimmedNote = newCorrespondenceNote.trim();
+    if (!trimmedNote) {
+      setCorrespondenceError("Correspondence note is required.");
+      return;
+    }
+
+    setCorrespondenceSaving(true);
+    setCorrespondenceError(null);
+
+    const { error } = await supabase.from("recipient_correspondence").insert({
+      recipient_id: id,
+      correspondence_date: newCorrespondenceDate,
+      note: trimmedNote,
+    });
+
+    if (error) {
+      if ((error as { code?: string }).code === "42P01") {
+        setIsCorrespondenceBackendReady(false);
+        setCorrespondenceError(
+          "Correspondence backend is not available yet for this environment.",
+        );
+        setCorrespondenceSaving(false);
+        return;
+      }
+
+      setCorrespondenceError(error.message);
+      setCorrespondenceSaving(false);
+      return;
+    }
+
+    setIsCorrespondenceBackendReady(true);
+    setNewCorrespondenceNote("");
+    setCorrespondenceSaving(false);
+    await loadCorrespondenceHistory();
   };
 
   const del = async () => {
@@ -579,7 +697,7 @@ export function RecipientEdit() {
 
             <div className="mt-1 rounded-lg border border-border/80 p-2.5 md:col-span-2">
               <h2 className="text-sm font-semibold">Primary contact</h2>
-              <div className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-3">
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-medium text-foreground">
                     First name
@@ -603,6 +721,20 @@ export function RecipientEdit() {
                     value={form.primary_contact_last_name}
                     onChange={(e) =>
                       update({ primary_contact_last_name: e.target.value })
+                    }
+                    disabled={!canEdit || saving}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-foreground">
+                    Job title
+                  </label>
+                  <input
+                    className="h-9 rounded-md border border-input bg-card px-3 py-1.5 text-sm"
+                    value={form.primary_contact_job_title}
+                    onChange={(e) =>
+                      update({ primary_contact_job_title: e.target.value })
                     }
                     disabled={!canEdit || saving}
                   />
@@ -635,26 +767,12 @@ export function RecipientEdit() {
                     disabled={!canEdit || saving}
                   />
                 </div>
-
-                <div className="flex flex-col gap-1.5 md:col-span-2">
-                  <label className="text-xs font-medium text-foreground">
-                    Job title
-                  </label>
-                  <input
-                    className="h-9 rounded-md border border-input bg-card px-3 py-1.5 text-sm"
-                    value={form.primary_contact_job_title}
-                    onChange={(e) =>
-                      update({ primary_contact_job_title: e.target.value })
-                    }
-                    disabled={!canEdit || saving}
-                  />
-                </div>
               </div>
             </div>
 
             <div className="rounded-lg border border-border/80 p-2.5 md:col-span-2">
               <h2 className="text-sm font-semibold">Secondary contact</h2>
-              <div className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-3">
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-medium text-foreground">
                     First name
@@ -678,6 +796,20 @@ export function RecipientEdit() {
                     value={form.secondary_contact_last_name}
                     onChange={(e) =>
                       update({ secondary_contact_last_name: e.target.value })
+                    }
+                    disabled={!canEdit || saving}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-foreground">
+                    Job title
+                  </label>
+                  <input
+                    className="h-9 rounded-md border border-input bg-card px-3 py-1.5 text-sm"
+                    value={form.secondary_contact_job_title}
+                    onChange={(e) =>
+                      update({ secondary_contact_job_title: e.target.value })
                     }
                     disabled={!canEdit || saving}
                   />
@@ -710,25 +842,146 @@ export function RecipientEdit() {
                     disabled={!canEdit || saving}
                   />
                 </div>
-
-                <div className="flex flex-col gap-1.5 md:col-span-2">
-                  <label className="text-xs font-medium text-foreground">
-                    Job title
-                  </label>
-                  <input
-                    className="h-9 rounded-md border border-input bg-card px-3 py-1.5 text-sm"
-                    value={form.secondary_contact_job_title}
-                    onChange={(e) =>
-                      update({ secondary_contact_job_title: e.target.value })
-                    }
-                    disabled={!canEdit || saving}
-                  />
-                </div>
               </div>
             </div>
           </div>
 
           <div className="mt-2 flex flex-col gap-3">
+            <div className="rounded-lg border border-border/80 p-2.5">
+              <div className="flex items-end justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-semibold">
+                    Correspondence history
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    Track the latest correspondence and keep a simple audit
+                    trail.
+                  </p>
+                </div>
+                {!isNew ? (
+                  <div className="text-xs text-muted-foreground">
+                    {correspondenceRows.length} total
+                  </div>
+                ) : null}
+              </div>
+
+              {isNew ? (
+                <div className="mt-2 rounded-md border border-border bg-muted/35 p-3 text-sm text-foreground">
+                  Save this recipient to add correspondence history.
+                </div>
+              ) : !isCorrespondenceBackendReady ? (
+                <div className="mt-2 rounded-md border border-border bg-muted/35 p-3 text-sm text-foreground">
+                  Correspondence history will appear here after the backend
+                  table is available.
+                </div>
+              ) : (
+                <>
+                  <div className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-12">
+                    <div className="flex flex-col gap-1.5 md:col-span-3">
+                      <label className="text-xs font-medium text-foreground">
+                        Date
+                      </label>
+                      <input
+                        type="date"
+                        className="h-9 rounded-md border border-input bg-card px-3 py-1.5 text-sm"
+                        value={newCorrespondenceDate}
+                        onChange={(e) =>
+                          setNewCorrespondenceDate(e.target.value)
+                        }
+                        disabled={!canEdit || saving || correspondenceSaving}
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-1.5 md:col-span-7">
+                      <label className="text-xs font-medium text-foreground">
+                        Short note
+                      </label>
+                      <input
+                        className="h-9 rounded-md border border-input bg-card px-3 py-1.5 text-sm"
+                        value={newCorrespondenceNote}
+                        maxLength={240}
+                        onChange={(e) =>
+                          setNewCorrespondenceNote(e.target.value)
+                        }
+                        disabled={!canEdit || saving || correspondenceSaving}
+                        placeholder="Called primary contact to confirm intake process"
+                      />
+                    </div>
+
+                    <div className="flex items-end md:col-span-2">
+                      <Button
+                        className="w-full"
+                        onClick={() => void addCorrespondenceEntry()}
+                        disabled={
+                          !canEdit ||
+                          saving ||
+                          correspondenceSaving ||
+                          !newCorrespondenceDate ||
+                          !newCorrespondenceNote.trim()
+                        }
+                      >
+                        {correspondenceSaving ? "Adding…" : "Add entry"}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {correspondenceError ? (
+                    <div className="mt-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                      {correspondenceError}
+                    </div>
+                  ) : null}
+
+                  {correspondenceLoading ? (
+                    <div className="mt-2 text-sm text-muted-foreground">
+                      Loading correspondence…
+                    </div>
+                  ) : (
+                    <div className="mt-2 overflow-x-auto rounded-xl border border-border bg-card/80">
+                      <table className="min-w-full text-left text-sm">
+                        <thead className="bg-muted/35 text-xs uppercase text-muted-foreground">
+                          <tr>
+                            <th className="px-3 py-2">Date</th>
+                            <th className="px-3 py-2">Note</th>
+                            <th className="px-3 py-2">Logged</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {correspondenceRows.map((entry) => (
+                            <tr
+                              key={entry.id}
+                              className="border-t border-border/80 hover:bg-muted/20"
+                            >
+                              <td className="px-3 py-2">
+                                {new Date(
+                                  entry.correspondence_date,
+                                ).toLocaleDateString()}
+                              </td>
+                              <td className="px-3 py-2">{entry.note}</td>
+                              <td className="px-3 py-2 text-muted-foreground">
+                                {new Date(
+                                  entry.created_at,
+                                ).toLocaleDateString()}
+                              </td>
+                            </tr>
+                          ))}
+                          {correspondenceRows.length === 0 ? (
+                            <tr>
+                              <td
+                                className="px-3 py-6 text-center text-sm text-muted-foreground"
+                                colSpan={3}
+                              >
+                                No correspondence history yet.
+                              </td>
+                            </tr>
+                          ) : null}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
             <div className="flex items-end justify-between gap-4">
               <div>
                 <h2 className="text-lg font-semibold">Associated deliveries</h2>
@@ -767,64 +1020,111 @@ export function RecipientEdit() {
                 <table className="min-w-full text-left text-sm">
                   <thead className="bg-muted/35 text-xs uppercase text-muted-foreground">
                     <tr>
-                      <th className="px-3 py-2">Target delivery</th>
+                      <th className="px-3 py-2">Requested on</th>
+                      <th className="px-3 py-2">Target date</th>
                       <th className="px-3 py-2">Status</th>
+                      <th className="px-3 py-2">Shipped date</th>
+                      <th className="px-3 py-2">
+                        <div>Items</div>
+                        <div className="text-[10px] font-normal normal-case text-muted-foreground">
+                          W | B | T
+                        </div>
+                      </th>
                       <th className="px-3 py-2">Contact</th>
                       <th className="px-3 py-2">Coordinator</th>
-                      <th className="px-3 py-2">Updated</th>
                     </tr>
                   </thead>
                   <tbody>
                     {associatedDeliveries.map((d) => (
-                      <tr
-                        key={d.id}
-                        className="border-t border-border/80 hover:bg-muted/20"
-                      >
-                        <td className="px-3 py-2">
-                          <Link
-                            className="font-medium text-foreground underline decoration-muted-foreground/50 underline-offset-2"
-                            to={`/deliveries/${d.id}`}
-                          >
-                            {d.target_delivery_date
-                              ? new Date(
-                                  d.target_delivery_date,
-                                ).toLocaleDateString()
+                      <Fragment key={d.id}>
+                        <tr className="border-t border-border/80 hover:bg-muted/20">
+                          <td className="px-3 py-2">
+                            {d.requested_date
+                              ? new Date(d.requested_date).toLocaleDateString()
                               : "—"}
-                          </Link>
-                        </td>
-                        <td className="px-3 py-2">
-                          {formatDeliveryStatusById(d.status_id)}
-                        </td>
-                        <td className="px-3 py-2">
-                          {d.recipient_contact_slot === "primary"
-                            ? [
-                                d.recipients?.primary_contact_last_name,
-                                d.recipients?.primary_contact_first_name,
-                              ]
-                                .filter(Boolean)
-                                .join(", ") || "Primary"
-                            : d.recipient_contact_slot === "secondary"
+                          </td>
+                          <td className="px-3 py-2">
+                            <Link
+                              className="font-medium text-foreground underline decoration-muted-foreground/50 underline-offset-2"
+                              to={`/deliveries/${d.id}`}
+                            >
+                              {d.target_delivery_date
+                                ? new Date(
+                                    d.target_delivery_date,
+                                  ).toLocaleDateString()
+                                : "—"}
+                            </Link>
+                          </td>
+                          <td className="px-3 py-2">
+                            <span
+                              className={`inline-flex rounded-md px-2 py-1 text-xs font-medium ${statusClassName(d.status_id)}`}
+                            >
+                              {formatDeliveryStatusById(d.status_id)}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2">
+                            {d.shipped_date
+                              ? new Date(d.shipped_date).toLocaleDateString()
+                              : "—"}
+                          </td>
+                          <td className="px-3 py-2">
+                            <span className="font-medium">
+                              {Number(d.wigs ?? 0)}
+                            </span>
+                            <span className="mx-2 text-muted-foreground">
+                              |
+                            </span>
+                            <span className="font-medium">
+                              {Number(d.beanies ?? 0)}
+                            </span>
+                            <span className="mx-2 text-muted-foreground">
+                              |
+                            </span>
+                            <span className="font-medium">
+                              {Number(d.wigs ?? 0) + Number(d.beanies ?? 0)}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2">
+                            {d.recipient_contact_slot === "primary"
                               ? [
-                                  d.recipients?.secondary_contact_last_name,
-                                  d.recipients?.secondary_contact_first_name,
+                                  d.recipients?.primary_contact_last_name,
+                                  d.recipients?.primary_contact_first_name,
                                 ]
                                   .filter(Boolean)
-                                  .join(", ") || "Secondary"
-                              : "—"}
-                        </td>
-                        <td className="px-3 py-2">
-                          {d.user_profiles?.full_name ?? "—"}
-                        </td>
-                        <td className="px-3 py-2 text-muted-foreground">
-                          {new Date(d.updated_at).toLocaleDateString()}
-                        </td>
-                      </tr>
+                                  .join(", ") || "Primary"
+                              : d.recipient_contact_slot === "secondary"
+                                ? [
+                                    d.recipients?.secondary_contact_last_name,
+                                    d.recipients?.secondary_contact_first_name,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(", ") || "Secondary"
+                                : "—"}
+                          </td>
+                          <td className="px-3 py-2">
+                            {d.user_profiles?.full_name ?? "Unassigned"}
+                          </td>
+                        </tr>
+                        {d.notes?.trim() ? (
+                          <tr className="bg-muted/5">
+                            <td
+                              className="px-3 pb-2 pt-0 text-xs text-muted-foreground"
+                              colSpan={7}
+                            >
+                              <span className="font-medium text-foreground">
+                                Note:
+                              </span>{" "}
+                              {d.notes}
+                            </td>
+                          </tr>
+                        ) : null}
+                      </Fragment>
                     ))}
                     {associatedDeliveries.length === 0 ? (
                       <tr>
                         <td
                           className="px-3 py-6 text-center text-sm text-muted-foreground"
-                          colSpan={5}
+                          colSpan={7}
                         >
                           No deliveries for this recipient.
                         </td>

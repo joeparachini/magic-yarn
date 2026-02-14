@@ -4,17 +4,12 @@ import { Button } from "../components/ui/button";
 import { supabase } from "../lib/supabaseClient";
 
 type AppPermission =
-  | "organizations.read"
-  | "organizations.write"
-  | "organizations.delete"
-  | "contacts.read"
-  | "contacts.write"
-  | "contacts.delete"
+  | "recipients.read"
+  | "recipients.write"
+  | "recipients.delete"
   | "deliveries.read"
   | "deliveries.write"
-  | "deliveries.delete"
-  | "delivery_items.read"
-  | "delivery_items.write";
+  | "deliveries.delete";
 
 type RolePermissionRow = {
   role: Role;
@@ -35,30 +30,19 @@ const permissions: Array<{
   label: string;
 }> = [
   {
-    group: "Organizations",
-    permission: "organizations.read",
-    label: "Read organizations",
+    group: "Recipients",
+    permission: "recipients.read",
+    label: "Read recipients",
   },
   {
-    group: "Organizations",
-    permission: "organizations.write",
-    label: "Create/update organizations",
+    group: "Recipients",
+    permission: "recipients.write",
+    label: "Create/update recipients",
   },
   {
-    group: "Organizations",
-    permission: "organizations.delete",
-    label: "Delete organizations",
-  },
-  { group: "Contacts", permission: "contacts.read", label: "Read contacts" },
-  {
-    group: "Contacts",
-    permission: "contacts.write",
-    label: "Create/update contacts",
-  },
-  {
-    group: "Contacts",
-    permission: "contacts.delete",
-    label: "Delete contacts",
+    group: "Recipients",
+    permission: "recipients.delete",
+    label: "Delete recipients",
   },
   {
     group: "Deliveries",
@@ -74,16 +58,6 @@ const permissions: Array<{
     group: "Deliveries",
     permission: "deliveries.delete",
     label: "Delete deliveries",
-  },
-  {
-    group: "Items",
-    permission: "delivery_items.read",
-    label: "Read delivery items",
-  },
-  {
-    group: "Items",
-    permission: "delivery_items.write",
-    label: "Create/update/delete delivery items",
   },
 ];
 

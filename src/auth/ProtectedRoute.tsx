@@ -3,7 +3,7 @@ import { useAuth } from "./AuthProvider";
 import type { Role } from "./types";
 
 export function ProtectedRoute({ allowedRoles }: { allowedRoles?: Role[] }) {
-  const { session, loading, role, roleLoading } = useAuth();
+  const { session, loading, role, roleLoading, isApproved } = useAuth();
   const location = useLocation();
 
   if (loading || roleLoading) {
@@ -15,7 +15,17 @@ export function ProtectedRoute({ allowedRoles }: { allowedRoles?: Role[] }) {
   }
 
   if (!session) {
-    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+    return (
+      <Navigate
+        to="/login"
+        replace
+        state={{ from: `${location.pathname}${location.search}${location.hash}` }}
+      />
+    );
+  }
+
+  if (!isApproved) {
+    return <Navigate to="/awaiting-approval" replace />;
   }
 
   if (allowedRoles && allowedRoles.length > 0) {

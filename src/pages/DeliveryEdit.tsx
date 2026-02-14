@@ -3,38 +3,35 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import type { Role } from "../auth/types";
 import { Button } from "../components/ui/button";
+import {
+  DELIVERY_STATUS_OPTIONS,
+  type DeliveryStatusId,
+  toDeliveryStatusId,
+} from "../lib/deliveryStatus";
 import { supabase } from "../lib/supabaseClient";
-
-type DeliveryStatus = "pending" | "scheduled" | "completed" | "cancelled";
-type OrgOption = { id: string; name: string };
-type ContactOption = {
+type RecipientOption = {
   id: string;
-  first_name: string;
-  last_name: string;
-  organization_id: string;
+  name: string;
   address: string | null;
   city: string | null;
   state: string | null;
   zip: string | null;
+  assigned_user_id: string | null;
+  user_profiles?: { full_name: string | null } | null;
 };
-type CoordinatorOption = { id: string; full_name: string | null };
 
 type DeliveryFormState = {
-  organization_id: string;
-  contact_id: string;
-  delivery_date: string;
-  status: DeliveryStatus;
+  recipient_id: string;
+  requested_date: string;
+  target_delivery_date: string;
+  shipped_date: string;
+  tracking_number: string;
+  completed_date: string;
+  status_id: DeliveryStatusId;
   coordinator_id: string;
+  wigs: number;
+  beanies: number;
   notes: string;
-};
-
-type DeliveryItemRow = {
-  id: string;
-  delivery_id: string;
-  wig_type: string;
-  quantity: number;
-  notes: string | null;
-  created_at: string;
 };
 
 function canEditDeliveries(role: Role | null) {
@@ -47,91 +44,76 @@ function canEditDeliveries(role: Role | null) {
 
 function emptyForm(): DeliveryFormState {
   return {
-    organization_id: "",
-    contact_id: "",
-    delivery_date: "",
-    status: "pending",
+    recipient_id: "",
+    requested_date: "",
+    target_delivery_date: "",
+    shipped_date: "",
+    tracking_number: "",
+    completed_date: "",
+    status_id: 1,
     coordinator_id: "",
+    wigs: 0,
+    beanies: 0,
     notes: "",
   };
 }
-
-const statusOptions: DeliveryStatus[] = [
-  "pending",
-  "scheduled",
-  "completed",
-  "cancelled",
-];
 
 export function DeliveryEdit() {
   const { id } = useParams();
   const isNew = !id;
   const navigate = useNavigate();
   const location = useLocation();
-  const { role, user } = useAuth();
+  const { role } = useAuth();
   const canEdit = canEditDeliveries(role);
   const canDelete = role === "admin";
-  const isAdmin = role === "admin";
 
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [orgs, setOrgs] = useState<OrgOption[]>([]);
-  const [contacts, setContacts] = useState<ContactOption[]>([]);
-  const [coordinators, setCoordinators] = useState<CoordinatorOption[]>([]);
+  const [recipients, setRecipients] = useState<RecipientOption[]>([]);
 
-  const [orgAddress, setOrgAddress] = useState<string>("");
-  const [contactAddress, setContactAddress] = useState<string>("");
-  const [addressSource, setAddressSource] = useState<
-    "organization" | "contact"
-  >("organization");
+  const [recipientAddress, setRecipientAddress] = useState<string>("");
 
   const [form, setForm] = useState<DeliveryFormState>(emptyForm());
-  const [items, setItems] = useState<DeliveryItemRow[]>([]);
 
   const title = useMemo(
     () => (isNew ? "New delivery" : "Edit delivery"),
     [isNew],
   );
+  const totalItems = form.wigs + form.beanies;
 
   const update = (patch: Partial<DeliveryFormState>) =>
     setForm((prev) => ({ ...prev, ...patch }));
 
-  const loadOrgs = async () => {
+  const loadRecipients = async () => {
     const { data, error } = await supabase
-      .from("organizations")
-      .select("id, name")
+      .from("recipients")
+      .select(
+        "id, name, address, city, state, zip, assigned_user_id, user_profiles(full_name)",
+      )
       .order("name");
     if (error) {
       setError(error.message);
-      setOrgs([]);
+      setRecipients([]);
       return;
     }
-    setOrgs((data ?? []) as OrgOption[]);
-  };
 
-  const loadContactsForOrg = async (organizationId: string) => {
-    if (!organizationId) {
-      setContacts([]);
-      return [] as ContactOption[];
-    }
-    const { data, error } = await supabase
-      .from("contacts")
-      .select(
-        "id, first_name, last_name, organization_id, address, city, state, zip",
-      )
-      .eq("organization_id", organizationId)
-      .order("last_name")
-      .order("first_name");
-    if (error) {
-      setError(error.message);
-      setContacts([]);
-      return [] as ContactOption[];
-    }
-    const next = (data ?? []) as ContactOption[];
-    setContacts(next);
-    return next;
+    const normalized = (data ?? []).map((row: any) => {
+      const chapterLeader = Array.isArray(row.user_profiles)
+        ? row.user_profiles[0]
+        : row.user_profiles;
+      return {
+        ...row,
+        user_profiles: chapterLeader
+          ? {
+              full_name: (chapterLeader.full_name as string | null) ?? null,
+            }
+          : null,
+      };
+    });
+
+    setRecipients(normalized as RecipientOption[]);
   };
 
   const formatAddress = (parts: {
@@ -149,89 +131,50 @@ export function DeliveryEdit() {
     return [line1, line2].filter(Boolean).join(" | ").trim();
   };
 
-  const loadOrgAddress = async (organizationId: string) => {
-    if (!organizationId) {
-      setOrgAddress("");
+  const loadRecipientAddress = (recipientId: string) => {
+    if (!recipientId) {
+      setRecipientAddress("");
       return;
     }
-    const { data, error } = await supabase
-      .from("organizations")
-      .select("address, city, state, zip")
-      .eq("id", organizationId)
-      .maybeSingle();
-    if (error) {
-      setError(error.message);
-      setOrgAddress("");
+    const selected = recipients.find(
+      (recipient) => recipient.id === recipientId,
+    );
+    if (!selected) {
+      setRecipientAddress("");
       return;
     }
-    setOrgAddress(formatAddress(data as any));
-  };
-
-  const loadCoordinators = async () => {
-    if (!isAdmin) return;
-    const { data, error } = await supabase
-      .from("user_profiles")
-      .select("id, full_name")
-      .order("created_at", { ascending: false });
-    if (error) {
-      setError(error.message);
-      setCoordinators([]);
-      return;
-    }
-    setCoordinators((data ?? []) as CoordinatorOption[]);
-  };
-
-  const loadItems = async (deliveryId: string) => {
-    const { data, error } = await supabase
-      .from("delivery_items")
-      .select("id, delivery_id, wig_type, quantity, notes, created_at")
-      .eq("delivery_id", deliveryId)
-      .order("created_at", { ascending: true });
-    if (error) {
-      setError(error.message);
-      setItems([]);
-      return;
-    }
-    setItems((data ?? []) as DeliveryItemRow[]);
+    setRecipientAddress(formatAddress(selected));
   };
 
   useEffect(() => {
-    void loadOrgs();
-    void loadCoordinators();
+    void loadRecipients();
   }, []);
 
   useEffect(() => {
-    void loadContactsForOrg(form.organization_id);
-    void loadOrgAddress(form.organization_id);
-  }, [form.organization_id]);
+    loadRecipientAddress(form.recipient_id);
+  }, [form.recipient_id, recipients]);
+
+  const selectedRecipient = useMemo(
+    () => recipients.find((recipient) => recipient.id === form.recipient_id),
+    [recipients, form.recipient_id],
+  );
+
+  const chapterLeaderLabel = useMemo(() => {
+    if (!selectedRecipient?.assigned_user_id) return "Unassigned";
+    return (
+      selectedRecipient.user_profiles?.full_name?.trim() ||
+      selectedRecipient.assigned_user_id
+    );
+  }, [selectedRecipient]);
 
   useEffect(() => {
-    if (!form.contact_id) {
-      if (addressSource === "contact") {
-        setAddressSource("organization");
-      }
-      setContactAddress("");
-      return;
-    }
-
-    const selected = contacts.find((c) => c.id === form.contact_id);
-    if (!selected) {
-      if (addressSource === "contact") {
-        setAddressSource("organization");
-      }
-      setContactAddress("");
-      return;
-    }
-
-    setContactAddress(
-      formatAddress({
-        address: selected.address,
-        city: selected.city,
-        state: selected.state,
-        zip: selected.zip,
-      }),
+    const nextCoordinator = selectedRecipient?.assigned_user_id ?? "";
+    setForm((prev) =>
+      prev.coordinator_id === nextCoordinator
+        ? prev
+        : { ...prev, coordinator_id: nextCoordinator },
     );
-  }, [addressSource, contacts, form.contact_id]);
+  }, [selectedRecipient]);
 
   useEffect(() => {
     if (isNew) return;
@@ -242,7 +185,7 @@ export function DeliveryEdit() {
       const { data, error } = await supabase
         .from("deliveries")
         .select(
-          "organization_id, contact_id, delivery_date, status, coordinator_id, address, notes",
+          "recipient_id, requested_date, target_delivery_date, shipped_date, tracking_number, completed_date, status_id, coordinator_id, address, wigs, beanies, notes",
         )
         .eq("id", id)
         .maybeSingle();
@@ -258,46 +201,22 @@ export function DeliveryEdit() {
         return;
       }
 
-      const organizationId = (data as any).organization_id as string;
-      const existingAddress = ((data as any).address ?? "") as string;
+      const recipientId = (data as any).recipient_id as string;
       setForm({
-        organization_id: organizationId,
-        contact_id: (data as any).contact_id ?? "",
-        delivery_date: (data as any).delivery_date ?? "",
-        status: ((data as any).status ?? "pending") as DeliveryStatus,
+        recipient_id: recipientId,
+        requested_date: (data as any).requested_date ?? "",
+        target_delivery_date: (data as any).target_delivery_date ?? "",
+        shipped_date: (data as any).shipped_date ?? "",
+        tracking_number: (data as any).tracking_number ?? "",
+        completed_date: (data as any).completed_date ?? "",
+        status_id: toDeliveryStatusId((data as any).status_id) ?? 1,
         coordinator_id: (data as any).coordinator_id ?? "",
+        wigs: Number((data as any).wigs ?? 0),
+        beanies: Number((data as any).beanies ?? 0),
         notes: (data as any).notes ?? "",
       });
 
-      const orgContacts = await loadContactsForOrg(organizationId);
-      await loadOrgAddress(organizationId);
-      await loadItems(id);
-
-      // Best-effort detection of address source for existing deliveries
-      const existingContactId = ((data as any).contact_id ?? "") as string;
-      const matchedContact = orgContacts.find(
-        (c) => c.id === existingContactId,
-      );
-      if (existingContactId && matchedContact) {
-        const contact = ((
-          await supabase
-            .from("contacts")
-            .select("address, city, state, zip")
-            .eq("id", existingContactId)
-            .maybeSingle()
-        ).data ?? null) as any;
-        const contactAddr = formatAddress(contact ?? {});
-        setContactAddress(contactAddr);
-        if (existingAddress && contactAddr && existingAddress === contactAddr)
-          setAddressSource("contact");
-        else setAddressSource("organization");
-      } else {
-        if (existingContactId) {
-          setForm((prev) => ({ ...prev, contact_id: "" }));
-        }
-        setContactAddress("");
-        setAddressSource("organization");
-      }
+      loadRecipientAddress(recipientId);
 
       setLoading(false);
     };
@@ -310,24 +229,14 @@ export function DeliveryEdit() {
       setError("Not authorized to edit deliveries.");
       return;
     }
-    if (!form.organization_id) {
-      setError("Organization is required.");
+    if (!form.recipient_id) {
+      setError("Recipient is required.");
       return;
     }
 
-    if (addressSource === "contact" && !form.contact_id) {
-      setError("Select a contact or switch address source to organization.");
-      return;
-    }
-
-    const resolvedAddress =
-      addressSource === "contact" ? contactAddress : orgAddress;
+    const resolvedAddress = recipientAddress;
     if (!resolvedAddress) {
-      setError(
-        addressSource === "contact"
-          ? "Contact address is blank. Add an address to the contact or switch to organization address."
-          : "Organization address is blank. Add an address to the organization or switch to contact address.",
-      );
+      setError("Recipient address is blank. Add an address to the recipient.");
       return;
     }
 
@@ -335,11 +244,19 @@ export function DeliveryEdit() {
     setError(null);
 
     const payload = {
-      organization_id: form.organization_id,
-      contact_id: form.contact_id || null,
-      delivery_date: form.delivery_date ? form.delivery_date : null,
-      status: form.status,
+      recipient_id: form.recipient_id,
+      recipient_contact_slot: null,
+      requested_date: form.requested_date ? form.requested_date : null,
+      target_delivery_date: form.target_delivery_date
+        ? form.target_delivery_date
+        : null,
+      shipped_date: form.shipped_date ? form.shipped_date : null,
+      tracking_number: form.tracking_number.trim() || null,
+      completed_date: form.completed_date ? form.completed_date : null,
+      status_id: form.status_id,
       coordinator_id: form.coordinator_id || null,
+      wigs: Math.max(0, Math.trunc(Number(form.wigs) || 0)),
+      beanies: Math.max(0, Math.trunc(Number(form.beanies) || 0)),
       address: resolvedAddress,
       notes: form.notes.trim() || null,
       updated_at: new Date().toISOString(),
@@ -392,88 +309,6 @@ export function DeliveryEdit() {
     navigate("/deliveries", { replace: true });
   };
 
-  const assignToMe = async () => {
-    if (!canEdit || !user?.id) return;
-    update({ coordinator_id: user.id });
-    if (!isNew) {
-      setSaving(true);
-      const { error } = await supabase
-        .from("deliveries")
-        .update({
-          coordinator_id: user.id,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", id);
-      if (error) setError(error.message);
-      setSaving(false);
-    }
-  };
-
-  const addItem = async () => {
-    if (!canEdit) return;
-    if (isNew || !id) {
-      setError("Save the delivery before adding items.");
-      return;
-    }
-
-    setSaving(true);
-    setError(null);
-    const { error } = await supabase.from("delivery_items").insert({
-      delivery_id: id,
-      wig_type: "Standard",
-      quantity: 1,
-      notes: null,
-    });
-    if (error) {
-      setError(error.message);
-      setSaving(false);
-      return;
-    }
-    await loadItems(id);
-    setSaving(false);
-  };
-
-  const updateItem = async (
-    itemId: string,
-    patch: Partial<Pick<DeliveryItemRow, "wig_type" | "quantity" | "notes">>,
-  ) => {
-    if (!canEdit) return;
-    setSaving(true);
-    setError(null);
-    const { error } = await supabase
-      .from("delivery_items")
-      .update(patch)
-      .eq("id", itemId);
-    if (error) {
-      setError(error.message);
-      setSaving(false);
-      return;
-    }
-    if (id) await loadItems(id);
-    setSaving(false);
-  };
-
-  const deleteItem = async (itemId: string) => {
-    if (!canEdit) return;
-    const ok = window.confirm("Delete this item?");
-    if (!ok) return;
-    setSaving(true);
-    setError(null);
-    const { error } = await supabase
-      .from("delivery_items")
-      .delete()
-      .eq("id", itemId);
-    if (error) {
-      setError(error.message);
-      setSaving(false);
-      return;
-    }
-    if (id) await loadItems(id);
-    setSaving(false);
-  };
-
-  const hasSelectedContact = contacts.some((c) => c.id === form.contact_id);
-
   return (
     <div className="flex flex-col gap-4 rounded-xl border border-border/70 bg-card/70 p-4 shadow-sm">
       <div className="flex items-start justify-between gap-4">
@@ -520,79 +355,28 @@ export function DeliveryEdit() {
         <div className="text-sm text-muted-foreground">Loading…</div>
       ) : (
         <div className="flex flex-col gap-6">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div className="flex flex-col gap-2 md:col-span-2">
-              <label className="text-xs font-medium text-foreground">
-                Organization
-              </label>
-              <select
-                className="rounded-md border border-input bg-card px-3 py-2 text-sm"
-                value={form.organization_id}
-                onChange={(e) => {
-                  setAddressSource("organization");
-                  setContactAddress("");
-                  update({ organization_id: e.target.value, contact_id: "" });
-                }}
-                disabled={!canEdit || saving}
-              >
-                <option value="">Select organization…</option>
-                {orgs.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-2 md:col-span-2">
-              <label className="text-xs font-medium text-foreground">
-                Contact
-              </label>
-              <select
-                className="rounded-md border border-input bg-card px-3 py-2 text-sm"
-                value={form.contact_id}
-                onChange={(e) => {
-                  const nextContactId = e.target.value;
-                  update({ contact_id: nextContactId });
-                  if (nextContactId) {
-                    setAddressSource("contact");
-                  } else {
-                    setAddressSource("organization");
-                    setContactAddress("");
-                  }
-                }}
-                disabled={!canEdit || saving || !form.organization_id}
-              >
-                <option value="">No specific contact</option>
-                {contacts.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.last_name}, {c.first_name}
-                  </option>
-                ))}
-              </select>
-              {!form.organization_id ? (
-                <div className="text-xs text-muted-foreground">
-                  Select an organization first.
-                </div>
-              ) : !form.contact_id ? (
-                <div className="text-xs text-muted-foreground">
-                  No contact selected. This delivery will remain
-                  organization-level.
-                </div>
-              ) : null}
-            </div>
-
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <div className="flex flex-col gap-2">
               <label className="text-xs font-medium text-foreground">
-                Delivery date
+                Recipient
               </label>
-              <input
-                type="date"
+              <select
                 className="rounded-md border border-input bg-card px-3 py-2 text-sm"
-                value={form.delivery_date}
-                onChange={(e) => update({ delivery_date: e.target.value })}
+                value={form.recipient_id}
+                onChange={(e) => {
+                  update({
+                    recipient_id: e.target.value,
+                  });
+                }}
                 disabled={!canEdit || saving}
-              />
+              >
+                <option value="">Select recipient…</option>
+                {recipients.map((recipient) => (
+                  <option key={recipient.id} value={recipient.id}>
+                    {recipient.name}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="flex flex-col gap-2">
@@ -601,128 +385,114 @@ export function DeliveryEdit() {
               </label>
               <select
                 className="rounded-md border border-input bg-card px-3 py-2 text-sm"
-                value={form.status}
-                onChange={(e) =>
-                  update({ status: e.target.value as DeliveryStatus })
-                }
+                value={String(form.status_id)}
+                onChange={(e) => {
+                  const nextStatusId = toDeliveryStatusId(e.target.value);
+                  if (!nextStatusId) return;
+                  update({ status_id: nextStatusId });
+                }}
                 disabled={!canEdit || saving}
               >
-                {statusOptions.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
+                {DELIVERY_STATUS_OPTIONS.map((option) => (
+                  <option key={option.value} value={String(option.value)}>
+                    {option.label}
                   </option>
                 ))}
               </select>
             </div>
 
-            <div className="flex flex-col gap-2 md:col-span-2">
+            <div className="flex flex-col gap-2">
               <label className="text-xs font-medium text-foreground">
-                Coordinator
+                Chapter leader
               </label>
-              {isAdmin ? (
-                <select
-                  className="rounded-md border border-input bg-card px-3 py-2 text-sm"
-                  value={form.coordinator_id}
-                  onChange={(e) => update({ coordinator_id: e.target.value })}
-                  disabled={!canEdit || saving}
-                >
-                  <option value="">Unassigned</option>
-                  {coordinators.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.full_name ?? c.id}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <input
-                    className="w-full rounded-md border border-input bg-muted/35 px-3 py-2 text-sm"
-                    value={
-                      form.coordinator_id
-                        ? form.coordinator_id === user?.id
-                          ? "Assigned to you"
-                          : form.coordinator_id
-                        : "Unassigned"
-                    }
-                    readOnly
-                  />
-                  {canEdit ? (
-                    <Button
-                      variant="secondary"
-                      onClick={() => void assignToMe()}
-                      disabled={saving}
-                    >
-                      Assign me
-                    </Button>
-                  ) : null}
-                </div>
-              )}
+              <input
+                className="w-full rounded-md border border-input bg-muted/35 px-3 py-2 text-sm"
+                value={chapterLeaderLabel}
+                readOnly
+              />
             </div>
 
-            <div className="flex flex-col gap-2 md:col-span-2">
-              <label className="text-xs font-medium text-foreground">
-                Address
-              </label>
-              <div className="flex flex-col gap-2 rounded-md border border-border p-3">
-                <div
-                  className={`grid grid-cols-1 gap-3 ${
-                    form.contact_id ? "md:grid-cols-2" : ""
-                  }`}
-                >
-                  <div
-                    className={`rounded-md border p-3 transition-opacity ${
-                      addressSource === "organization"
-                        ? "border-input bg-card"
-                        : "border-border bg-muted/35 opacity-60"
-                    }`}
-                  >
-                    <label className="mb-2 flex items-center gap-2 text-sm">
-                      <input
-                        type="radio"
-                        name="addressSource"
-                        checked={addressSource === "organization"}
-                        onChange={() => setAddressSource("organization")}
-                        disabled={!canEdit || saving}
-                      />
-                      Organization address
-                    </label>
-                    <div className="rounded-md border border-input bg-muted/35 px-3 py-2 text-sm text-foreground">
-                      {orgAddress || "—"}
-                    </div>
-                  </div>
+            <div className="grid grid-cols-3 gap-4 md:col-span-3">
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-medium text-foreground">
+                  Requested on
+                </label>
+                <input
+                  type="date"
+                  className="rounded-md border border-input bg-card px-3 py-2 text-sm"
+                  value={form.requested_date}
+                  onChange={(e) => update({ requested_date: e.target.value })}
+                  disabled={!canEdit || saving}
+                />
+              </div>
 
-                  {hasSelectedContact ? (
-                    <div
-                      className={`rounded-md border p-3 transition-opacity ${
-                        addressSource === "contact"
-                          ? "border-input bg-card"
-                          : "border-border bg-muted/35 opacity-60"
-                      }`}
-                    >
-                      <label className="mb-2 flex items-center gap-2 text-sm">
-                        <input
-                          type="radio"
-                          name="addressSource"
-                          checked={addressSource === "contact"}
-                          onChange={() => setAddressSource("contact")}
-                          disabled={!canEdit || saving}
-                        />
-                        Contact address
-                      </label>
-                      <div className="rounded-md border border-input bg-muted/35 px-3 py-2 text-sm text-foreground">
-                        {contactAddress || "—"}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  Address is restricted to the selected Organization or Contact
-                  address.
-                </div>
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-medium text-foreground">
+                  Target delivery date
+                </label>
+                <input
+                  type="date"
+                  className="rounded-md border border-input bg-card px-3 py-2 text-sm"
+                  value={form.target_delivery_date}
+                  onChange={(e) =>
+                    update({ target_delivery_date: e.target.value })
+                  }
+                  disabled={!canEdit || saving}
+                />
               </div>
             </div>
 
-            <div className="flex flex-col gap-2 md:col-span-2">
+            <div className="grid grid-cols-1 gap-4 md:col-span-3 md:grid-cols-3">
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-medium text-foreground">
+                  Shipped date
+                </label>
+                <input
+                  type="date"
+                  className="rounded-md border border-input bg-card px-3 py-2 text-sm"
+                  value={form.shipped_date}
+                  onChange={(e) => update({ shipped_date: e.target.value })}
+                  disabled={!canEdit || saving}
+                />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-medium text-foreground">
+                  Tracking number
+                </label>
+                <input
+                  type="text"
+                  className="rounded-md border border-input bg-card px-3 py-2 text-sm"
+                  value={form.tracking_number}
+                  onChange={(e) => update({ tracking_number: e.target.value })}
+                  disabled={!canEdit || saving}
+                />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-medium text-foreground">
+                  Completed date
+                </label>
+                <input
+                  type="date"
+                  className="rounded-md border border-input bg-card px-3 py-2 text-sm"
+                  value={form.completed_date}
+                  onChange={(e) => update({ completed_date: e.target.value })}
+                  disabled={!canEdit || saving}
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 md:col-span-3">
+              <label className="text-xs font-medium text-foreground">
+                Address
+              </label>
+              <div className="rounded-md border border-input bg-muted/35 px-3 py-2 text-sm text-foreground">
+                {recipientAddress || "—"}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 md:col-span-3">
               <label className="text-xs font-medium text-foreground">
                 Notes
               </label>
@@ -733,138 +503,51 @@ export function DeliveryEdit() {
                 disabled={!canEdit || saving}
               />
             </div>
-          </div>
 
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-base font-semibold">Items</h2>
-                <p className="text-sm text-muted-foreground">
-                  Wig types and quantities.
-                </p>
+            <div className="flex gap-4 md:col-span-3">
+              <div className="flex min-w-0 flex-1 flex-col gap-2">
+                <label className="text-xs font-medium text-foreground">
+                  Wigs
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  className="rounded-md border border-input bg-card px-3 py-2 text-sm"
+                  value={form.wigs}
+                  onChange={(e) =>
+                    update({ wigs: Math.max(0, Number(e.target.value || 0)) })
+                  }
+                  disabled={!canEdit || saving}
+                />
               </div>
-              {canEdit ? (
-                <Button
-                  variant="secondary"
-                  onClick={() => void addItem()}
-                  disabled={saving}
-                >
-                  Add item
-                </Button>
-              ) : null}
-            </div>
 
-            <div className="overflow-x-auto rounded-xl border border-border bg-card/80">
-              <table className="min-w-full text-left text-sm">
-                <thead className="bg-muted/35 text-xs uppercase text-muted-foreground">
-                  <tr>
-                    <th className="px-3 py-2">Type</th>
-                    <th className="px-3 py-2">Qty</th>
-                    <th className="px-3 py-2">Notes</th>
-                    <th className="px-3 py-2"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((it) => (
-                    <tr
-                      key={it.id}
-                      className="border-t border-border/80 hover:bg-muted/20"
-                    >
-                      <td className="px-3 py-2">
-                        <input
-                          className="w-56 rounded-md border border-input bg-card px-2 py-1 text-sm"
-                          value={it.wig_type}
-                          onChange={(e) =>
-                            setItems((prev) =>
-                              prev.map((p) =>
-                                p.id === it.id
-                                  ? { ...p, wig_type: e.target.value }
-                                  : p,
-                              ),
-                            )
-                          }
-                          onBlur={() =>
-                            void updateItem(it.id, { wig_type: it.wig_type })
-                          }
-                          disabled={!canEdit || saving}
-                        />
-                      </td>
-                      <td className="px-3 py-2">
-                        <input
-                          type="number"
-                          min={1}
-                          className="w-24 rounded-md border border-input bg-card px-2 py-1 text-sm"
-                          value={it.quantity}
-                          onChange={(e) =>
-                            setItems((prev) =>
-                              prev.map((p) =>
-                                p.id === it.id
-                                  ? {
-                                      ...p,
-                                      quantity: Number(e.target.value || 1),
-                                    }
-                                  : p,
-                              ),
-                            )
-                          }
-                          onBlur={() =>
-                            void updateItem(it.id, { quantity: it.quantity })
-                          }
-                          disabled={!canEdit || saving}
-                        />
-                      </td>
-                      <td className="px-3 py-2">
-                        <input
-                          className="w-full min-w-56 rounded-md border border-input bg-card px-2 py-1 text-sm"
-                          value={it.notes ?? ""}
-                          onChange={(e) =>
-                            setItems((prev) =>
-                              prev.map((p) =>
-                                p.id === it.id
-                                  ? { ...p, notes: e.target.value }
-                                  : p,
-                              ),
-                            )
-                          }
-                          onBlur={() =>
-                            void updateItem(it.id, {
-                              notes: (it.notes ?? "").trim() || null,
-                            })
-                          }
-                          disabled={!canEdit || saving}
-                        />
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        {canEdit ? (
-                          <Button
-                            variant="secondary"
-                            onClick={() => void deleteItem(it.id)}
-                            disabled={saving}
-                          >
-                            Delete
-                          </Button>
-                        ) : null}
-                      </td>
-                    </tr>
-                  ))}
-                  {items.length === 0 ? (
-                    <tr>
-                      <td
-                        className="px-3 py-6 text-center text-sm text-muted-foreground"
-                        colSpan={4}
-                      >
-                        No items.
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
-            {isNew ? (
-              <div className="text-xs text-muted-foreground">
-                Save the delivery to manage items.
+              <div className="flex min-w-0 flex-1 flex-col gap-2">
+                <label className="text-xs font-medium text-foreground">
+                  Beanies
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  className="rounded-md border border-input bg-card px-3 py-2 text-sm"
+                  value={form.beanies}
+                  onChange={(e) =>
+                    update({
+                      beanies: Math.max(0, Number(e.target.value || 0)),
+                    })
+                  }
+                  disabled={!canEdit || saving}
+                />
               </div>
-            ) : null}
+
+              <div className="flex min-w-0 flex-1 flex-col gap-2">
+                <label className="text-xs font-medium text-foreground">
+                  Total items
+                </label>
+                <div className="rounded-md border border-input bg-muted/35 px-3 py-2 text-sm text-foreground">
+                  {totalItems}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

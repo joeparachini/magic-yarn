@@ -113,7 +113,7 @@ These are already reflected in `vercel.json`:
 
 ### 4) SPA routing
 
-Because the app uses `BrowserRouter`, direct navigation to routes like `/organizations`, `/contacts/new`, or `/admin/users` needs a rewrite to `index.html`.
+Because the app uses `BrowserRouter`, direct navigation to routes like `/recipients`, `/deliveries/new`, or `/admin/users` needs a rewrite to `index.html`.
 
 `vercel.json` includes this rewrite:
 

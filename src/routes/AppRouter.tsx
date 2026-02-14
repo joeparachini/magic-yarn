@@ -3,13 +3,12 @@ import { ProtectedRoute } from "../auth/ProtectedRoute";
 import { AppShell } from "../components/AppShell";
 import { AdminUsers } from "../pages/AdminUsers";
 import { AdminPermissions } from "../pages/AdminPermissions";
+import { AwaitingApproval } from "../pages/AwaitingApproval";
 import { Dashboard } from "../pages/Dashboard";
 import { Login } from "../pages/Login";
 import { NotFound } from "../pages/NotFound";
-import { OrganizationsList } from "../pages/OrganizationsList";
-import { OrganizationEdit } from "../pages/OrganizationEdit";
-import { ContactsList } from "../pages/ContactsList";
-import { ContactEdit } from "../pages/ContactEdit";
+import { RecipientsList } from "../pages/RecipientsList";
+import { RecipientEdit } from "../pages/RecipientEdit";
 import { DeliveriesList } from "../pages/DeliveriesList";
 import { DeliveryEdit } from "../pages/DeliveryEdit";
 
@@ -17,12 +16,13 @@ export function AppRouter() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/awaiting-approval" element={<AwaitingApproval />} />
 
       <Route element={<ProtectedRoute />}>
         <Route element={<AppShell />}>
           <Route index element={<Dashboard />} />
           <Route
-            path="/contacts"
+            path="/recipients"
             element={
               <ProtectedRoute
                 allowedRoles={[
@@ -34,27 +34,9 @@ export function AppRouter() {
               />
             }
           >
-            <Route index element={<ContactsList />} />
-            <Route path=":id" element={<ContactEdit />} />
-            <Route path="new" element={<ContactEdit />} />
-          </Route>
-
-          <Route
-            path="/organizations"
-            element={
-              <ProtectedRoute
-                allowedRoles={[
-                  "admin",
-                  "contacts_manager",
-                  "delivery_coordinator",
-                  "view_only",
-                ]}
-              />
-            }
-          >
-            <Route index element={<OrganizationsList />} />
-            <Route path=":id" element={<OrganizationEdit />} />
-            <Route path="new" element={<OrganizationEdit />} />
+            <Route index element={<RecipientsList />} />
+            <Route path=":id" element={<RecipientEdit />} />
+            <Route path="new" element={<RecipientEdit />} />
           </Route>
 
           <Route

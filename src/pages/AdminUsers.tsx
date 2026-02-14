@@ -6,6 +6,7 @@ import { Button } from "../components/ui/button";
 type UserProfileRow = {
   id: string;
   role: Role;
+  is_approved: boolean;
   full_name: string | null;
   email?: string | null;
   avatar_url: string | null;
@@ -68,6 +69,7 @@ export function AdminUsers() {
     const normalized = (usersRes.data ?? []).map((row: any) => ({
       ...row,
       role: row.role as Role,
+      is_approved: Boolean(row.is_approved),
       email: row.email ?? null,
       avatar_url: row.avatar_url ?? null,
     }));
@@ -135,6 +137,25 @@ export function AdminUsers() {
     setSavingId(null);
   };
 
+  const setApproval = async (userId: string, approved: boolean) => {
+    setSavingId(userId);
+    setError(null);
+
+    const { error } = await supabase.rpc("admin_set_user_approval", {
+      target_user_id: userId,
+      approved,
+    });
+
+    if (error) {
+      setError(error.message);
+      setSavingId(null);
+      return;
+    }
+
+    await load();
+    setSavingId(null);
+  };
+
   const setUserRegions = async (userId: string, regionCodes: string[]) => {
     setSavingId(userId);
     setError(null);
@@ -187,6 +208,13 @@ export function AdminUsers() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
+        <Button
+          variant="secondary"
+          onClick={() => void load()}
+          disabled={loading || savingId !== null}
+        >
+          Refresh
+        </Button>
         <div className="text-xs text-muted-foreground">
           {filtered.length} shown
         </div>
@@ -201,8 +229,8 @@ export function AdminUsers() {
               <tr>
                 <th className="px-3 py-2">Name</th>
                 <th className="px-3 py-2">Email</th>
-                <th className="px-3 py-2">User ID</th>
                 <th className="px-3 py-2">Role</th>
+                <th className="px-3 py-2">Approved</th>
                 <th className="px-3 py-2">Regions</th>
                 <th className="px-3 py-2"></th>
               </tr>
@@ -233,9 +261,6 @@ export function AdminUsers() {
                   <td className="px-3 py-2 text-foreground">
                     {r.email ?? "—"}
                   </td>
-                  <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
-                    {r.id}
-                  </td>
                   <td className="px-3 py-2">
                     <select
                       className="w-56 rounded-md border border-input bg-card px-2 py-1 text-foreground outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
@@ -251,6 +276,17 @@ export function AdminUsers() {
                         </option>
                       ))}
                     </select>
+                  </td>
+                  <td className="px-3 py-2">
+                    <span
+                      className={
+                        r.is_approved
+                          ? "rounded border border-border bg-secondary px-2 py-1 text-xs text-secondary-foreground"
+                          : "rounded border border-border bg-muted px-2 py-1 text-xs text-muted-foreground"
+                      }
+                    >
+                      {r.is_approved ? "Approved" : "Pending"}
+                    </span>
                   </td>
                   <td className="px-3 py-2">
                     {regions.length === 0 ? (
@@ -290,10 +326,10 @@ export function AdminUsers() {
                   <td className="px-3 py-2 text-right">
                     <Button
                       variant="secondary"
-                      onClick={() => void load()}
-                      disabled={loading || savingId !== null}
+                      onClick={() => void setApproval(r.id, !r.is_approved)}
+                      disabled={savingId === r.id}
                     >
-                      Refresh
+                      {r.is_approved ? "Revoke" : "Approve"}
                     </Button>
                   </td>
                 </tr>

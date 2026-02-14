@@ -14,6 +14,7 @@ type AuthContextValue = {
   user: User | null;
   loading: boolean;
   role: Role | null;
+  isApproved: boolean;
   roleLoading: boolean;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -22,10 +23,28 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-async function fetchRole(userId: string): Promise<Role | null> {
+function getOAuthRedirectUrl() {
+  const url = new URL(window.location.href);
+  if (
+    url.hostname === "0.0.0.0" ||
+    url.hostname === "127.0.0.1" ||
+    url.hostname === "::1"
+  ) {
+    url.hostname = "localhost";
+  }
+  url.pathname = "/login";
+  url.search = "";
+  url.hash = "";
+  return url.toString();
+}
+
+async function fetchAccess(userId: string): Promise<{
+  role: Role | null;
+  isApproved: boolean;
+} | null> {
   const { data, error } = await supabase
     .from("user_profiles")
-    .select("role")
+    .select("role, is_approved")
     .eq("id", userId)
     .maybeSingle();
 
@@ -40,10 +59,20 @@ async function fetchRole(userId: string): Promise<Role | null> {
     role === "delivery_coordinator" ||
     role === "view_only"
   ) {
-    return role;
+    return {
+      role,
+      isApproved: Boolean(
+        (data as { is_approved?: unknown } | null)?.is_approved,
+      ),
+    };
   }
 
-  return null;
+  return {
+    role: null,
+    isApproved: Boolean(
+      (data as { is_approved?: unknown } | null)?.is_approved,
+    ),
+  };
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -52,18 +81,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const [role, setRole] = useState<Role | null>(null);
-  const [roleLoading, setRoleLoading] = useState(false);
+  const [isApproved, setIsApproved] = useState(false);
+  const [roleLoading, setRoleLoading] = useState(true);
 
   const refreshRole = async () => {
     if (!user) {
       setRole(null);
+      setIsApproved(false);
+      setRoleLoading(false);
       return;
     }
     setRoleLoading(true);
     try {
       await supabase.rpc("ensure_user_profile");
-      const resolved = await fetchRole(user.id);
-      setRole(resolved ?? "view_only");
+      const resolved = await fetchAccess(user.id);
+      setRole(resolved?.role ?? "view_only");
+      setIsApproved(resolved?.isApproved ?? false);
     } finally {
       setRoleLoading(false);
     }
@@ -75,6 +108,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const init = async () => {
       const { data } = await supabase.auth.getSession();
       if (!mounted) return;
+      setRoleLoading(Boolean(data.session?.user));
       setSession(data.session);
       setUser(data.session?.user ?? null);
       setLoading(false);
@@ -84,6 +118,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const { data: subscription } = supabase.auth.onAuthStateChange(
       (_event, newSession) => {
+        setRoleLoading(Boolean(newSession?.user));
         setSession(newSession);
         setUser(newSession?.user ?? null);
         setLoading(false);
@@ -105,7 +140,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: window.location.origin,
+        redirectTo: getOAuthRedirectUrl(),
       },
     });
   };
@@ -120,12 +155,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user,
       loading,
       role,
+      isApproved,
       roleLoading,
       signInWithGoogle,
       signOut,
       refreshRole,
     }),
-    [session, user, loading, role, roleLoading],
+    [session, user, loading, role, isApproved, roleLoading],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

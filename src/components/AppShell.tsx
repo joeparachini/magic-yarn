@@ -28,12 +28,8 @@ function buildBreadcrumbs(pathname: string): Crumb[] {
   const crumbs: Crumb[] = [{ label: "Dashboard", href: "/" }];
 
   switch (first) {
-    case "contacts":
-      crumbs.push({ label: "Contacts", href: "/contacts" });
-      if (second) crumbs.push({ label: second === "new" ? "New" : "Edit" });
-      break;
-    case "organizations":
-      crumbs.push({ label: "Organizations", href: "/organizations" });
+    case "recipients":
+      crumbs.push({ label: "Recipients", href: "/recipients" });
       if (second) crumbs.push({ label: second === "new" ? "New" : "Edit" });
       break;
     case "deliveries":

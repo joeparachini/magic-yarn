@@ -6,7 +6,6 @@ import {
   Package,
   Shield,
   Truck,
-  Users,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 
@@ -94,11 +93,10 @@ export function AppSidebar({
               icon={LayoutDashboard}
             />
             <SidebarNavLink
-              to="/organizations"
-              label="Organizations"
+              to="/recipients"
+              label="Recipients"
               icon={Building2}
             />
-            <SidebarNavLink to="/contacts" label="Contacts" icon={Users} />
             <SidebarNavLink to="/deliveries" label="Deliveries" icon={Truck} />
           </SidebarMenu>
         </SidebarGroup>
