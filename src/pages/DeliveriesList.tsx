@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import type { Role } from "../auth/types";
 import { Button } from "../components/ui/button";
@@ -39,12 +39,31 @@ function canEditDeliveries(role: Role | null) {
 export function DeliveriesList() {
   const { role } = useAuth();
   const canEdit = canEditDeliveries(role);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [rows, setRows] = useState<DeliveryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<DeliveryStatus | "all">("all");
+  const query = searchParams.get("q") ?? "";
+  const statusParam = searchParams.get("status");
+  const status: DeliveryStatus | "all" =
+    statusParam === "pending" ||
+    statusParam === "scheduled" ||
+    statusParam === "completed" ||
+    statusParam === "cancelled"
+      ? statusParam
+      : "all";
+  const listSearch = searchParams.toString();
+
+  const updateSearchParam = (key: string, value: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (value.trim()) {
+      next.set(key, value);
+    } else {
+      next.delete(key);
+    }
+    setSearchParams(next, { replace: true });
+  };
 
   const load = async () => {
     setLoading(true);
@@ -131,7 +150,7 @@ export function DeliveriesList() {
             Refresh
           </Button>
           {canEdit ? (
-            <Link to="/deliveries/new">
+            <Link to={listSearch ? `/deliveries/new?${listSearch}` : "/deliveries/new"}>
               <Button>New delivery</Button>
             </Link>
           ) : null}
@@ -149,12 +168,17 @@ export function DeliveriesList() {
           className="w-full max-w-md rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
           placeholder="Search deliveries…"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => updateSearchParam("q", e.target.value)}
         />
         <select
           className="w-full max-w-xs rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
           value={status}
-          onChange={(e) => setStatus(e.target.value as any)}
+          onChange={(e) =>
+            updateSearchParam(
+              "status",
+              e.target.value === "all" ? "" : e.target.value,
+            )
+          }
         >
           {statusOptions.map((opt) => (
             <option key={opt.value} value={opt.value}>
@@ -190,7 +214,11 @@ export function DeliveriesList() {
                   <td className="px-3 py-2">
                     <Link
                       className="font-medium text-foreground underline decoration-muted-foreground/50 underline-offset-2"
-                      to={`/deliveries/${r.id}`}
+                      to={
+                        listSearch
+                          ? `/deliveries/${r.id}?${listSearch}`
+                          : `/deliveries/${r.id}`
+                      }
                     >
                       {r.delivery_date
                         ? new Date(r.delivery_date).toLocaleDateString()

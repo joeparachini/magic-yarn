@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Link,
+  useLocation,
   useNavigate,
   useParams,
   useSearchParams,
@@ -43,6 +44,7 @@ export function ContactEdit() {
   const { id } = useParams();
   const isNew = !id;
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const navigate = useNavigate();
   const { role } = useAuth();
   const preselectedOrganizationId =
@@ -225,7 +227,7 @@ export function ContactEdit() {
         <div>
           <h1 className="text-xl font-semibold">{title}</h1>
           <p className="text-sm text-muted-foreground">
-            <Link className="underline" to="/contacts">
+            <Link className="underline" to={`/contacts${location.search}`}>
               Back to contacts
             </Link>
           </p>

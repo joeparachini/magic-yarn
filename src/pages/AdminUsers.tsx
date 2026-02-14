@@ -13,6 +13,17 @@ type UserProfileRow = {
   updated_at: string;
 };
 
+type RegionRow = {
+  code: string;
+  name: string;
+  sort_order: number;
+};
+
+type UserRegionRow = {
+  user_id: string;
+  region_code: string;
+};
+
 const roles: Role[] = [
   "admin",
   "contacts_manager",
@@ -22,6 +33,10 @@ const roles: Role[] = [
 
 export function AdminUsers() {
   const [rows, setRows] = useState<UserProfileRow[]>([]);
+  const [regions, setRegions] = useState<RegionRow[]>([]);
+  const [regionsByUserId, setRegionsByUserId] = useState<
+    Record<string, string[]>
+  >({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -30,23 +45,44 @@ export function AdminUsers() {
   const load = async () => {
     setLoading(true);
     setError(null);
-    const { data, error } = await supabase.rpc("admin_list_users");
+    const [usersRes, regionsRes, userRegionsRes] = await Promise.all([
+      supabase.rpc("admin_list_users"),
+      supabase.rpc("admin_list_regions"),
+      supabase.rpc("admin_list_user_regions"),
+    ]);
 
-    if (error) {
-      setError(error.message);
+    if (usersRes.error || regionsRes.error || userRegionsRes.error) {
+      setError(
+        usersRes.error?.message ??
+          regionsRes.error?.message ??
+          userRegionsRes.error?.message ??
+          "Failed to load users.",
+      );
       setRows([]);
+      setRegions([]);
+      setRegionsByUserId({});
       setLoading(false);
       return;
     }
 
-    const normalized = (data ?? []).map((row: any) => ({
+    const normalized = (usersRes.data ?? []).map((row: any) => ({
       ...row,
       role: row.role as Role,
       email: row.email ?? null,
       avatar_url: row.avatar_url ?? null,
     }));
 
+    const membershipMap: Record<string, string[]> = {};
+    for (const item of (userRegionsRes.data ?? []) as UserRegionRow[]) {
+      if (!membershipMap[item.user_id]) {
+        membershipMap[item.user_id] = [];
+      }
+      membershipMap[item.user_id].push(item.region_code);
+    }
+
     setRows(normalized as UserProfileRow[]);
+    setRegions((regionsRes.data ?? []) as RegionRow[]);
+    setRegionsByUserId(membershipMap);
     setLoading(false);
   };
 
@@ -99,6 +135,32 @@ export function AdminUsers() {
     setSavingId(null);
   };
 
+  const setUserRegions = async (userId: string, regionCodes: string[]) => {
+    setSavingId(userId);
+    setError(null);
+
+    const { error } = await supabase.rpc("admin_set_user_regions", {
+      target_user_id: userId,
+      region_codes: regionCodes,
+    });
+
+    if (error) {
+      setError(error.message);
+      setSavingId(null);
+      return;
+    }
+
+    await load();
+    setSavingId(null);
+  };
+
+  const toggleRegion = (userId: string, regionCode: string, checked: boolean) => {
+    const current = new Set(regionsByUserId[userId] ?? []);
+    if (checked) current.add(regionCode);
+    else current.delete(regionCode);
+    void setUserRegions(userId, Array.from(current));
+  };
+
   return (
     <div className="flex flex-col gap-4 rounded-xl border border-border/70 bg-card/70 p-4 shadow-sm">
       <div>
@@ -137,6 +199,7 @@ export function AdminUsers() {
                 <th className="px-3 py-2">Email</th>
                 <th className="px-3 py-2">User ID</th>
                 <th className="px-3 py-2">Role</th>
+                <th className="px-3 py-2">Regions</th>
                 <th className="px-3 py-2"></th>
               </tr>
             </thead>
@@ -185,6 +248,40 @@ export function AdminUsers() {
                       ))}
                     </select>
                   </td>
+                  <td className="px-3 py-2">
+                    {regions.length === 0 ? (
+                      <div className="text-xs text-muted-foreground">
+                        No regions configured.
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 gap-1">
+                        {regions.map((region) => {
+                          const checked =
+                            (regionsByUserId[r.id] ?? []).includes(region.code);
+                          return (
+                            <label
+                              key={`${r.id}:${region.code}`}
+                              className="flex items-center gap-2 text-xs"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                disabled={savingId === r.id}
+                                onChange={(e) =>
+                                  toggleRegion(
+                                    r.id,
+                                    region.code,
+                                    e.target.checked,
+                                  )
+                                }
+                              />
+                              <span>{region.name}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-right">
                     <Button
                       variant="secondary"
@@ -200,7 +297,7 @@ export function AdminUsers() {
                 <tr>
                   <td
                     className="px-3 py-6 text-center text-sm text-muted-foreground"
-                    colSpan={5}
+                    colSpan={6}
                   >
                     No users found.
                   </td>

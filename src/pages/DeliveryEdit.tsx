@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import type { Role } from "../auth/types";
 import { Button } from "../components/ui/button";
@@ -67,6 +67,7 @@ export function DeliveryEdit() {
   const { id } = useParams();
   const isNew = !id;
   const navigate = useNavigate();
+  const location = useLocation();
   const { role, user } = useAuth();
   const canEdit = canEditDeliveries(role);
   const canDelete = role === "admin";
@@ -113,7 +114,7 @@ export function DeliveryEdit() {
   const loadContactsForOrg = async (organizationId: string) => {
     if (!organizationId) {
       setContacts([]);
-      return;
+      return [] as ContactOption[];
     }
     const { data, error } = await supabase
       .from("contacts")
@@ -126,9 +127,11 @@ export function DeliveryEdit() {
     if (error) {
       setError(error.message);
       setContacts([]);
-      return;
+      return [] as ContactOption[];
     }
-    setContacts((data ?? []) as ContactOption[]);
+    const next = (data ?? []) as ContactOption[];
+    setContacts(next);
+    return next;
   };
 
   const formatAddress = (parts: {
@@ -200,17 +203,26 @@ export function DeliveryEdit() {
   useEffect(() => {
     void loadContactsForOrg(form.organization_id);
     void loadOrgAddress(form.organization_id);
-    setContactAddress("");
-    setAddressSource("organization");
-    update({ contact_id: "" });
   }, [form.organization_id]);
 
   useEffect(() => {
-    const selected = contacts.find((c) => c.id === form.contact_id);
-    if (!selected) {
+    if (!form.contact_id) {
+      if (addressSource === "contact") {
+        setAddressSource("organization");
+      }
       setContactAddress("");
       return;
     }
+
+    const selected = contacts.find((c) => c.id === form.contact_id);
+    if (!selected) {
+      if (addressSource === "contact") {
+        setAddressSource("organization");
+      }
+      setContactAddress("");
+      return;
+    }
+
     setContactAddress(
       formatAddress({
         address: selected.address,
@@ -219,7 +231,7 @@ export function DeliveryEdit() {
         zip: selected.zip,
       }),
     );
-  }, [contacts, form.contact_id]);
+  }, [addressSource, contacts, form.contact_id]);
 
   useEffect(() => {
     if (isNew) return;
@@ -257,23 +269,33 @@ export function DeliveryEdit() {
         notes: (data as any).notes ?? "",
       });
 
-      await loadContactsForOrg(organizationId);
+      const orgContacts = await loadContactsForOrg(organizationId);
       await loadOrgAddress(organizationId);
       await loadItems(id);
 
       // Best-effort detection of address source for existing deliveries
-      const contact = ((
-        await supabase
-          .from("contacts")
-          .select("address, city, state, zip")
-          .eq("id", (data as any).contact_id)
-          .maybeSingle()
-      ).data ?? null) as any;
-      const contactAddr = formatAddress(contact ?? {});
-      setContactAddress(contactAddr);
-      if (existingAddress && contactAddr && existingAddress === contactAddr)
-        setAddressSource("contact");
-      else setAddressSource("organization");
+      const existingContactId = ((data as any).contact_id ?? "") as string;
+      const matchedContact = orgContacts.find((c) => c.id === existingContactId);
+      if (existingContactId && matchedContact) {
+        const contact = ((
+          await supabase
+            .from("contacts")
+            .select("address, city, state, zip")
+            .eq("id", existingContactId)
+            .maybeSingle()
+        ).data ?? null) as any;
+        const contactAddr = formatAddress(contact ?? {});
+        setContactAddress(contactAddr);
+        if (existingAddress && contactAddr && existingAddress === contactAddr)
+          setAddressSource("contact");
+        else setAddressSource("organization");
+      } else {
+        if (existingContactId) {
+          setForm((prev) => ({ ...prev, contact_id: "" }));
+        }
+        setContactAddress("");
+        setAddressSource("organization");
+      }
 
       setLoading(false);
     };
@@ -290,8 +312,9 @@ export function DeliveryEdit() {
       setError("Organization is required.");
       return;
     }
-    if (!form.contact_id) {
-      setError("Contact is required.");
+
+    if (addressSource === "contact" && !form.contact_id) {
+      setError("Select a contact or switch address source to organization.");
       return;
     }
 
@@ -311,7 +334,7 @@ export function DeliveryEdit() {
 
     const payload = {
       organization_id: form.organization_id,
-      contact_id: form.contact_id,
+      contact_id: form.contact_id || null,
       delivery_date: form.delivery_date ? form.delivery_date : null,
       status: form.status,
       coordinator_id: form.coordinator_id || null,
@@ -447,13 +470,15 @@ export function DeliveryEdit() {
     setSaving(false);
   };
 
+  const hasSelectedContact = contacts.some((c) => c.id === form.contact_id);
+
   return (
     <div className="flex flex-col gap-4 rounded-xl border border-border/70 bg-card/70 p-4 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold">{title}</h1>
           <p className="text-sm text-muted-foreground">
-            <Link className="underline" to="/deliveries">
+            <Link className="underline" to={`/deliveries${location.search}`}>
               Back to deliveries
             </Link>
           </p>
@@ -501,9 +526,11 @@ export function DeliveryEdit() {
               <select
                 className="rounded-md border border-input bg-card px-3 py-2 text-sm"
                 value={form.organization_id}
-                onChange={(e) =>
-                  update({ organization_id: e.target.value, contact_id: "" })
-                }
+                onChange={(e) => {
+                  setAddressSource("organization");
+                  setContactAddress("");
+                  update({ organization_id: e.target.value, contact_id: "" });
+                }}
                 disabled={!canEdit || saving}
               >
                 <option value="">Select organization…</option>
@@ -522,10 +549,19 @@ export function DeliveryEdit() {
               <select
                 className="rounded-md border border-input bg-card px-3 py-2 text-sm"
                 value={form.contact_id}
-                onChange={(e) => update({ contact_id: e.target.value })}
+                onChange={(e) => {
+                  const nextContactId = e.target.value;
+                  update({ contact_id: nextContactId });
+                  if (nextContactId) {
+                    setAddressSource("contact");
+                  } else {
+                    setAddressSource("organization");
+                    setContactAddress("");
+                  }
+                }}
                 disabled={!canEdit || saving || !form.organization_id}
               >
-                <option value="">Select contact…</option>
+                <option value="">No specific contact</option>
                 {contacts.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.last_name}, {c.first_name}
@@ -535,6 +571,10 @@ export function DeliveryEdit() {
               {!form.organization_id ? (
                 <div className="text-xs text-muted-foreground">
                   Select an organization first.
+                </div>
+              ) : !form.contact_id ? (
+                <div className="text-xs text-muted-foreground">
+                  No contact selected. This delivery will remain organization-level.
                 </div>
               ) : null}
             </div>
@@ -621,32 +661,56 @@ export function DeliveryEdit() {
                 Address
               </label>
               <div className="flex flex-col gap-2 rounded-md border border-border p-3">
-                <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-4">
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="radio"
-                      name="addressSource"
-                      checked={addressSource === "organization"}
-                      onChange={() => setAddressSource("organization")}
-                      disabled={!canEdit || saving}
-                    />
-                    Organization address
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="radio"
-                      name="addressSource"
-                      checked={addressSource === "contact"}
-                      onChange={() => setAddressSource("contact")}
-                      disabled={!canEdit || saving || !form.contact_id}
-                    />
-                    Contact address
-                  </label>
-                </div>
-                <div className="rounded-md border border-input bg-muted/35 px-3 py-2 text-sm text-foreground">
-                  {(addressSource === "contact"
-                    ? contactAddress
-                    : orgAddress) || "—"}
+                <div
+                  className={`grid grid-cols-1 gap-3 ${
+                    form.contact_id ? "md:grid-cols-2" : ""
+                  }`}
+                >
+                  <div
+                    className={`rounded-md border p-3 transition-opacity ${
+                      addressSource === "organization"
+                        ? "border-input bg-card"
+                        : "border-border bg-muted/35 opacity-60"
+                    }`}
+                  >
+                    <label className="mb-2 flex items-center gap-2 text-sm">
+                      <input
+                        type="radio"
+                        name="addressSource"
+                        checked={addressSource === "organization"}
+                        onChange={() => setAddressSource("organization")}
+                        disabled={!canEdit || saving}
+                      />
+                      Organization address
+                    </label>
+                    <div className="rounded-md border border-input bg-muted/35 px-3 py-2 text-sm text-foreground">
+                      {orgAddress || "—"}
+                    </div>
+                  </div>
+
+                  {hasSelectedContact ? (
+                    <div
+                      className={`rounded-md border p-3 transition-opacity ${
+                        addressSource === "contact"
+                          ? "border-input bg-card"
+                          : "border-border bg-muted/35 opacity-60"
+                      }`}
+                    >
+                      <label className="mb-2 flex items-center gap-2 text-sm">
+                        <input
+                          type="radio"
+                          name="addressSource"
+                          checked={addressSource === "contact"}
+                          onChange={() => setAddressSource("contact")}
+                          disabled={!canEdit || saving}
+                        />
+                        Contact address
+                      </label>
+                      <div className="rounded-md border border-input bg-muted/35 px-3 py-2 text-sm text-foreground">
+                        {contactAddress || "—"}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
                 <div className="text-xs text-muted-foreground">
                   Address is restricted to the selected Organization or Contact

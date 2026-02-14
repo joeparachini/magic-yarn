@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import { Button } from "../components/ui/button";
 import { supabase } from "../lib/supabaseClient";
@@ -10,37 +10,73 @@ type OrganizationRow = {
   id: string;
   name: string;
   type: OrganizationType;
+  region_code: string | null;
   city: string | null;
   state: string | null;
   updated_at: string;
 };
 
+type RegionOption = {
+  code: string;
+  name: string;
+  sort_order: number;
+};
+
 export function OrganizationsList() {
   const { role } = useAuth();
   const canEdit = role === "admin" || role === "contacts_manager";
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [rows, setRows] = useState<OrganizationRow[]>([]);
+  const [regionsByCode, setRegionsByCode] = useState<Record<string, string>>(
+    {},
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
+  const query = searchParams.get("q") ?? "";
+  const listSearch = searchParams.toString();
+
+  const updateQueryParam = (value: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (value.trim()) {
+      next.set("q", value);
+    } else {
+      next.delete("q");
+    }
+    setSearchParams(next, { replace: true });
+  };
 
   const load = async () => {
     setLoading(true);
     setError(null);
 
-    const { data, error } = await supabase
-      .from("organizations")
-      .select("id, name, type, city, state, updated_at")
-      .order("name", { ascending: true });
+    const [organizationsRes, regionsRes] = await Promise.all([
+      supabase
+        .from("organizations")
+        .select("id, name, type, region_code, city, state, updated_at")
+        .order("name", { ascending: true }),
+      supabase.rpc("list_regions"),
+    ]);
 
-    if (error) {
-      setError(error.message);
+    if (organizationsRes.error || regionsRes.error) {
+      setError(
+        organizationsRes.error?.message ??
+          regionsRes.error?.message ??
+          "Failed to load organizations.",
+      );
       setRows([]);
+      setRegionsByCode({});
       setLoading(false);
       return;
     }
 
-    setRows((data ?? []) as OrganizationRow[]);
+    const regionMap: Record<string, string> = {};
+    for (const region of (regionsRes.data ?? []) as RegionOption[]) {
+      regionMap[region.code] = region.name;
+    }
+
+    setRows((organizationsRes.data ?? []) as OrganizationRow[]);
+    setRegionsByCode(regionMap);
     setLoading(false);
   };
 
@@ -52,11 +88,12 @@ export function OrganizationsList() {
     const q = query.trim().toLowerCase();
     if (!q) return rows;
     return rows.filter((r) => {
+      const regionName = r.region_code ? regionsByCode[r.region_code] ?? "" : "";
       const haystack =
-        `${r.name} ${r.city ?? ""} ${r.state ?? ""}`.toLowerCase();
+        `${r.name} ${r.city ?? ""} ${r.state ?? ""} ${regionName}`.toLowerCase();
       return haystack.includes(q);
     });
-  }, [rows, query]);
+  }, [rows, query, regionsByCode]);
 
   return (
     <div className="flex flex-col gap-4 rounded-xl border border-border/70 bg-card/70 p-4 shadow-sm">
@@ -77,7 +114,13 @@ export function OrganizationsList() {
             Refresh
           </Button>
           {canEdit ? (
-            <Link to="/organizations/new">
+            <Link
+              to={
+                listSearch
+                  ? `/organizations/new?${listSearch}`
+                  : "/organizations/new"
+              }
+            >
               <Button>New organization</Button>
             </Link>
           ) : null}
@@ -95,7 +138,7 @@ export function OrganizationsList() {
           className="w-full max-w-md rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
           placeholder="Search organizations…"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => updateQueryParam(e.target.value)}
         />
         <div className="text-xs text-muted-foreground">
           {filtered.length} shown
@@ -111,6 +154,7 @@ export function OrganizationsList() {
               <tr>
                 <th className="px-3 py-2">Name</th>
                 <th className="px-3 py-2">Type</th>
+                <th className="px-3 py-2">Region</th>
                 <th className="px-3 py-2">Location</th>
                 <th className="px-3 py-2">Updated</th>
               </tr>
@@ -124,12 +168,19 @@ export function OrganizationsList() {
                   <td className="px-3 py-2">
                     <Link
                       className="font-medium text-foreground underline decoration-muted-foreground/50 underline-offset-2"
-                      to={`/organizations/${r.id}`}
+                      to={
+                        listSearch
+                          ? `/organizations/${r.id}?${listSearch}`
+                          : `/organizations/${r.id}`
+                      }
                     >
                       {r.name}
                     </Link>
                   </td>
                   <td className="px-3 py-2">{r.type}</td>
+                  <td className="px-3 py-2">
+                    {r.region_code ? regionsByCode[r.region_code] ?? r.region_code : "—"}
+                  </td>
                   <td className="px-3 py-2">
                     {[r.city, r.state].filter(Boolean).join(", ") || "—"}
                   </td>
@@ -142,7 +193,7 @@ export function OrganizationsList() {
                 <tr>
                   <td
                     className="px-3 py-6 text-center text-sm text-muted-foreground"
-                    colSpan={4}
+                    colSpan={5}
                   >
                     No organizations found.
                   </td>

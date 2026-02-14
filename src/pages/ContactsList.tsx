@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import { Button } from "../components/ui/button";
 import { supabase } from "../lib/supabaseClient";
@@ -19,11 +19,23 @@ type ContactRow = {
 export function ContactsList() {
   const { role } = useAuth();
   const canEdit = role === "admin" || role === "contacts_manager";
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [rows, setRows] = useState<ContactRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
+  const query = searchParams.get("q") ?? "";
+  const listSearch = searchParams.toString();
+
+  const updateQueryParam = (value: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (value.trim()) {
+      next.set("q", value);
+    } else {
+      next.delete("q");
+    }
+    setSearchParams(next, { replace: true });
+  };
 
   const load = async () => {
     setLoading(true);
@@ -92,7 +104,7 @@ export function ContactsList() {
             Refresh
           </Button>
           {canEdit ? (
-            <Link to="/contacts/new">
+            <Link to={listSearch ? `/contacts/new?${listSearch}` : "/contacts/new"}>
               <Button>New contact</Button>
             </Link>
           ) : null}
@@ -110,7 +122,7 @@ export function ContactsList() {
           className="w-full max-w-md rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
           placeholder="Search contacts…"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => updateQueryParam(e.target.value)}
         />
         <div className="text-xs text-muted-foreground">
           {filtered.length} shown
@@ -140,7 +152,11 @@ export function ContactsList() {
                   <td className="px-3 py-2">
                     <Link
                       className="font-medium text-foreground underline decoration-muted-foreground/50 underline-offset-2"
-                      to={`/contacts/${r.id}`}
+                      to={
+                        listSearch
+                          ? `/contacts/${r.id}?${listSearch}`
+                          : `/contacts/${r.id}`
+                      }
                     >
                       {r.last_name}, {r.first_name}
                     </Link>
