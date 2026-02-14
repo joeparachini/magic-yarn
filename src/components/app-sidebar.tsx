@@ -3,6 +3,7 @@ import {
   Building2,
   GalleryVerticalEnd,
   LayoutDashboard,
+  LogOut,
   Package,
   Shield,
   Truck,
@@ -65,7 +66,7 @@ export function AppSidebar({
     .toUpperCase();
 
   return (
-    <Sidebar {...props}>
+    <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
@@ -131,7 +132,7 @@ export function AppSidebar({
                 {initials}
               </div>
             )}
-            <div className="min-w-0">
+            <div className="min-w-0 group-data-[collapsible=icon]:hidden">
               <div className="truncate text-sm font-medium leading-5">
                 {userName || userEmail || "Signed in"}
               </div>
@@ -147,8 +148,15 @@ export function AppSidebar({
               ) : null}
             </div>
           </div>
-          <Button variant="secondary" className="w-full" onClick={onSignOut}>
-            Logout
+          <Button
+            variant="secondary"
+            className="w-full justify-start gap-2 group-data-[collapsible=icon]:size-9 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0"
+            onClick={onSignOut}
+            title="Logout"
+            aria-label="Logout"
+          >
+            <LogOut className="size-4" />
+            <span className="group-data-[collapsible=icon]:hidden">Logout</span>
           </Button>
         </div>
       </SidebarFooter>
