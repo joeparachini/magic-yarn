@@ -34,6 +34,34 @@ type DeliveryFormState = {
   notes: string;
 };
 
+type DeliveryHistoryRow = {
+  id: string;
+  requested_date: string | null;
+  target_delivery_date: string | null;
+};
+
+function toDateStamp(value: string | null): number {
+  if (!value) return Number.POSITIVE_INFINITY;
+  const stamp = Date.parse(value);
+  return Number.isNaN(stamp) ? Number.POSITIVE_INFINITY : stamp;
+}
+
+function compareFirstDeliveryRows(
+  left: DeliveryHistoryRow,
+  right: DeliveryHistoryRow,
+): number {
+  const targetDiff =
+    toDateStamp(left.target_delivery_date) -
+    toDateStamp(right.target_delivery_date);
+  if (targetDiff !== 0) return targetDiff;
+
+  const requestedDiff =
+    toDateStamp(left.requested_date) - toDateStamp(right.requested_date);
+  if (requestedDiff !== 0) return requestedDiff;
+
+  return left.id.localeCompare(right.id);
+}
+
 function canEditDeliveries(role: Role | null) {
   return (
     role === "admin" ||
@@ -72,6 +100,8 @@ export function DeliveryEdit() {
   const [error, setError] = useState<string | null>(null);
 
   const [recipients, setRecipients] = useState<RecipientOption[]>([]);
+  const [firstDeliveryId, setFirstDeliveryId] = useState<string | null>(null);
+  const [checkingFirstDelivery, setCheckingFirstDelivery] = useState(false);
 
   const [recipientAddress, setRecipientAddress] = useState<string>("");
 
@@ -159,6 +189,12 @@ export function DeliveryEdit() {
     [recipients, form.recipient_id],
   );
 
+  const isFirstDeliveryForRecipient = useMemo(() => {
+    if (!form.recipient_id || checkingFirstDelivery) return false;
+    if (isNew) return firstDeliveryId === null;
+    return Boolean(id) && firstDeliveryId === id;
+  }, [checkingFirstDelivery, firstDeliveryId, form.recipient_id, id, isNew]);
+
   const chapterLeaderLabel = useMemo(() => {
     if (!selectedRecipient?.assigned_user_id) return "Unassigned";
     return (
@@ -175,6 +211,57 @@ export function DeliveryEdit() {
         : { ...prev, coordinator_id: nextCoordinator },
     );
   }, [selectedRecipient]);
+
+  useEffect(() => {
+    const recipientId = form.recipient_id;
+    if (!recipientId) {
+      setFirstDeliveryId(null);
+      setCheckingFirstDelivery(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadFirstDelivery = async () => {
+      setCheckingFirstDelivery(true);
+
+      const { data, error } = await supabase
+        .from("deliveries")
+        .select("id, requested_date, target_delivery_date")
+        .eq("recipient_id", recipientId);
+
+      if (error) {
+        if (cancelled) return;
+        setCheckingFirstDelivery(false);
+        return;
+      }
+
+      const rows = (data ?? []) as DeliveryHistoryRow[];
+      if (rows.length === 0) {
+        if (cancelled) return;
+        setFirstDeliveryId(null);
+        setCheckingFirstDelivery(false);
+        return;
+      }
+
+      let first = rows[0];
+      for (const row of rows.slice(1)) {
+        if (compareFirstDeliveryRows(row, first) < 0) {
+          first = row;
+        }
+      }
+
+      if (cancelled) return;
+      setFirstDeliveryId(first.id);
+      setCheckingFirstDelivery(false);
+    };
+
+    void loadFirstDelivery();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [form.recipient_id]);
 
   useEffect(() => {
     if (isNew) return;
@@ -231,6 +318,14 @@ export function DeliveryEdit() {
     }
     if (!form.recipient_id) {
       setError("Recipient is required.");
+      return;
+    }
+    if (!form.requested_date) {
+      setError("Requested date is required.");
+      return;
+    }
+    if (!form.target_delivery_date) {
+      setError("Target delivery date is required.");
       return;
     }
 
@@ -377,6 +472,15 @@ export function DeliveryEdit() {
                   </option>
                 ))}
               </select>
+              {form.recipient_id &&
+              !checkingFirstDelivery &&
+              isFirstDeliveryForRecipient ? (
+                <div className="text-xs">
+                  <span className="inline-flex rounded-md border border-chart-2/30 bg-chart-2/15 px-2 py-0.5 text-[11px] font-medium text-chart-2">
+                    First delivery
+                  </span>
+                </div>
+              ) : null}
             </div>
 
             <div className="flex flex-col gap-2">
@@ -415,20 +519,21 @@ export function DeliveryEdit() {
             <div className="grid grid-cols-3 gap-4 md:col-span-3">
               <div className="flex flex-col gap-2">
                 <label className="text-xs font-medium text-foreground">
-                  Requested on
+                  Requested on *
                 </label>
                 <input
                   type="date"
                   className="rounded-md border border-input bg-card px-3 py-2 text-sm"
                   value={form.requested_date}
                   onChange={(e) => update({ requested_date: e.target.value })}
+                  required
                   disabled={!canEdit || saving}
                 />
               </div>
 
               <div className="flex flex-col gap-2">
                 <label className="text-xs font-medium text-foreground">
-                  Target delivery date
+                  Target delivery date *
                 </label>
                 <input
                   type="date"
@@ -437,6 +542,7 @@ export function DeliveryEdit() {
                   onChange={(e) =>
                     update({ target_delivery_date: e.target.value })
                   }
+                  required
                   disabled={!canEdit || saving}
                 />
               </div>

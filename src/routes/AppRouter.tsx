@@ -11,6 +11,7 @@ import { RecipientsList } from "../pages/RecipientsList";
 import { RecipientEdit } from "../pages/RecipientEdit";
 import { DeliveriesList } from "../pages/DeliveriesList";
 import { DeliveryEdit } from "../pages/DeliveryEdit";
+import { DeliveryPlanner } from "../pages/DeliveryPlanner";
 
 export function AppRouter() {
   return (
@@ -55,6 +56,21 @@ export function AppRouter() {
             <Route index element={<DeliveriesList />} />
             <Route path=":id" element={<DeliveryEdit />} />
             <Route path="new" element={<DeliveryEdit />} />
+          </Route>
+
+          <Route
+            path="/delivery-planner"
+            element={
+              <ProtectedRoute
+                allowedRoles={[
+                  "admin",
+                  "contacts_manager",
+                  "delivery_coordinator",
+                ]}
+              />
+            }
+          >
+            <Route index element={<DeliveryPlanner />} />
           </Route>
 
           <Route

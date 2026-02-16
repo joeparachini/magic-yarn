@@ -71,10 +71,8 @@ function monthKeyFromDate(value: string | null): string | null {
   return value.length >= 7 ? value.slice(0, 7) : null;
 }
 
-const statusOptions: Array<{ label: string; value: DeliveryStatusId | "all" }> = [
-  { label: "All", value: "all" },
-  ...DELIVERY_STATUS_OPTIONS,
-];
+const statusOptions: Array<{ label: string; value: DeliveryStatusId | "all" }> =
+  [{ label: "All", value: "all" }, ...DELIVERY_STATUS_OPTIONS];
 
 function canEditDeliveries(role: Role | null) {
   return (
@@ -90,6 +88,28 @@ function statusClassName(statusId: DeliveryStatusId | null) {
   if (statusId === 2) return "bg-chart-1/15 text-chart-1";
   if (statusId === 3) return "bg-chart-2/15 text-chart-2";
   return "bg-muted text-muted-foreground";
+}
+
+function toDateStamp(value: string | null): number {
+  if (!value) return Number.POSITIVE_INFINITY;
+  const stamp = Date.parse(value);
+  return Number.isNaN(stamp) ? Number.POSITIVE_INFINITY : stamp;
+}
+
+function compareFirstDeliveryRows(
+  left: DeliveryRow,
+  right: DeliveryRow,
+): number {
+  const targetDiff =
+    toDateStamp(left.target_delivery_date) -
+    toDateStamp(right.target_delivery_date);
+  if (targetDiff !== 0) return targetDiff;
+
+  const requestedDiff =
+    toDateStamp(left.requested_date) - toDateStamp(right.requested_date);
+  if (requestedDiff !== 0) return requestedDiff;
+
+  return left.id.localeCompare(right.id);
 }
 
 export function DeliveriesList() {
@@ -221,7 +241,10 @@ export function DeliveriesList() {
     const q = query.trim().toLowerCase();
     return rows.filter((r) => {
       if (status !== "all" && r.status_id !== status) return false;
-      if (month !== "all" && monthKeyFromDate(r.target_delivery_date) !== month) {
+      if (
+        month !== "all" &&
+        monthKeyFromDate(r.target_delivery_date) !== month
+      ) {
         return false;
       }
       if (assigned === "unassigned") {
@@ -233,7 +256,8 @@ export function DeliveriesList() {
       const recipient = r.recipients?.name ?? "";
       const recipientState = r.recipients?.state ?? "";
       const chapterLeader = r.recipients?.user_profiles?.full_name ?? "";
-      const haystack = `${recipient} ${recipientState} ${chapterLeader} ${formatDeliveryStatusById(r.status_id)}`.toLowerCase();
+      const haystack =
+        `${recipient} ${recipientState} ${chapterLeader} ${formatDeliveryStatusById(r.status_id)}`.toLowerCase();
       return haystack.includes(q);
     });
   }, [rows, query, status, assigned, month]);
@@ -251,16 +275,25 @@ export function DeliveriesList() {
       let result = 0;
 
       if (sortKey === "recipient") {
-        result = compareText(left.recipients?.name ?? "", right.recipients?.name ?? "");
+        result = compareText(
+          left.recipients?.name ?? "",
+          right.recipients?.name ?? "",
+        );
       } else if (sortKey === "state") {
-        result = compareText(left.recipients?.state ?? "", right.recipients?.state ?? "");
+        result = compareText(
+          left.recipients?.state ?? "",
+          right.recipients?.state ?? "",
+        );
       } else if (sortKey === "chapterLeader") {
         result = compareText(
           left.recipients?.user_profiles?.full_name ?? "",
           right.recipients?.user_profiles?.full_name ?? "",
         );
       } else if (sortKey === "requested_date") {
-        result = compareText(left.requested_date ?? "", right.requested_date ?? "");
+        result = compareText(
+          left.requested_date ?? "",
+          right.requested_date ?? "",
+        );
       } else if (sortKey === "target_delivery_date") {
         result = compareText(
           left.target_delivery_date ?? "",
@@ -286,6 +319,25 @@ export function DeliveriesList() {
 
     return withIndex.map((entry) => entry.row);
   }, [filtered, sortDir, sortKey]);
+
+  const firstDeliveryIds = useMemo(() => {
+    const firstByRecipient = new Map<string, DeliveryRow>();
+
+    for (const row of rows) {
+      if (!row.recipient_id) continue;
+      const existing = firstByRecipient.get(row.recipient_id);
+      if (!existing) {
+        firstByRecipient.set(row.recipient_id, row);
+        continue;
+      }
+
+      if (compareFirstDeliveryRows(row, existing) < 0) {
+        firstByRecipient.set(row.recipient_id, row);
+      }
+    }
+
+    return new Set(Array.from(firstByRecipient.values()).map((row) => row.id));
+  }, [rows]);
 
   const updateSort = (nextKey: SortKey) => {
     const next = new URLSearchParams(searchParams);
@@ -400,7 +452,10 @@ export function DeliveriesList() {
             className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
             value={month}
             onChange={(e) =>
-              updateSearchParam("month", e.target.value === "all" ? "" : e.target.value)
+              updateSearchParam(
+                "month",
+                e.target.value === "all" ? "" : e.target.value,
+              )
             }
           >
             <option value="all">All months</option>
@@ -411,7 +466,9 @@ export function DeliveriesList() {
             ))}
           </select>
         </div>
-        <div className="text-xs text-muted-foreground md:pb-2">{sorted.length} shown</div>
+        <div className="text-xs text-muted-foreground md:pb-2">
+          {sorted.length} shown
+        </div>
       </div>
 
       {loading ? (
@@ -543,21 +600,34 @@ export function DeliveriesList() {
                     <td className="px-3 py-2">
                       <span className="font-medium">{Number(r.wigs ?? 0)}</span>
                       <span className="mx-2 text-muted-foreground">|</span>
-                      <span className="font-medium">{Number(r.beanies ?? 0)}</span>
+                      <span className="font-medium">
+                        {Number(r.beanies ?? 0)}
+                      </span>
                       <span className="mx-2 text-muted-foreground">|</span>
                       <span className="font-medium">
                         {Number(r.wigs ?? 0) + Number(r.beanies ?? 0)}
                       </span>
                     </td>
                   </tr>
-                  {r.notes?.trim() ? (
+                  {firstDeliveryIds.has(r.id) || r.notes?.trim() ? (
                     <tr className="bg-muted/5">
                       <td
                         className="px-3 pb-2 pt-0 text-xs text-muted-foreground"
                         colSpan={8}
                       >
-                        <span className="font-medium text-foreground">Note:</span>{" "}
-                        {r.notes}
+                        {firstDeliveryIds.has(r.id) ? (
+                          <span className="mr-2 inline-flex rounded-md border border-chart-2/30 bg-chart-2/15 px-2 py-0.5 text-[11px] font-medium text-chart-2">
+                            First delivery
+                          </span>
+                        ) : null}
+                        {r.notes?.trim() ? (
+                          <>
+                            <span className="font-medium text-foreground">
+                              Note:
+                            </span>{" "}
+                            {r.notes}
+                          </>
+                        ) : null}
                       </td>
                     </tr>
                   ) : null}

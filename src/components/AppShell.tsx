@@ -36,6 +36,9 @@ function buildBreadcrumbs(pathname: string): Crumb[] {
       crumbs.push({ label: "Deliveries", href: "/deliveries" });
       if (second) crumbs.push({ label: second === "new" ? "New" : "Edit" });
       break;
+    case "delivery-planner":
+      crumbs.push({ label: "Delivery Planner" });
+      break;
     case "admin":
       crumbs.push({ label: "Admin" });
       if (second === "users") crumbs.push({ label: "Users" });

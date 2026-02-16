@@ -1,6 +1,7 @@
 import * as React from "react";
 import {
   Building2,
+  CalendarClock,
   GalleryVerticalEnd,
   LayoutDashboard,
   LogOut,
@@ -99,6 +100,11 @@ export function AppSidebar({
               icon={Building2}
             />
             <SidebarNavLink to="/deliveries" label="Deliveries" icon={Truck} />
+            <SidebarNavLink
+              to="/delivery-planner"
+              label="Delivery Planner"
+              icon={CalendarClock}
+            />
           </SidebarMenu>
         </SidebarGroup>
 
