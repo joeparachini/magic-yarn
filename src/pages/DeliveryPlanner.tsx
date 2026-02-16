@@ -405,7 +405,9 @@ export function DeliveryPlanner() {
       return;
     }
 
-    const toCreate = selectedRows.filter((row) => selectableKeySet.has(row.key));
+    const toCreate = selectedRows.filter((row) =>
+      selectableKeySet.has(row.key),
+    );
     if (toCreate.length === 0) {
       setError("Select at least one row with a recipient address.");
       return;
@@ -415,7 +417,9 @@ export function DeliveryPlanner() {
     setError(null);
     setSuccessMessage(null);
 
-    const recipientIds = Array.from(new Set(toCreate.map((row) => row.recipient_id)));
+    const recipientIds = Array.from(
+      new Set(toCreate.map((row) => row.recipient_id)),
+    );
 
     const existingRes = await supabase
       .from("deliveries")
@@ -438,7 +442,10 @@ export function DeliveryPlanner() {
     }
 
     const dedupedToCreate = toCreate.filter(
-      (row) => !existingRecipientMonthSet.has(`${row.recipient_id}:${row.due_month_key}`),
+      (row) =>
+        !existingRecipientMonthSet.has(
+          `${row.recipient_id}:${row.due_month_key}`,
+        ),
     );
 
     if (dedupedToCreate.length === 0) {
@@ -493,7 +500,11 @@ export function DeliveryPlanner() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="secondary" onClick={() => void load()} disabled={loading || creating}>
+          <Button
+            variant="secondary"
+            onClick={() => void load()}
+            disabled={loading || creating}
+          >
             Refresh
           </Button>
           <Button
@@ -612,19 +623,27 @@ export function DeliveryPlanner() {
                         </div>
                       ) : null}
                     </td>
-                    <td className="px-3 py-2 align-top">{row.chapter_leader}</td>
+                    <td className="px-3 py-2 align-top">
+                      {row.chapter_leader}
+                    </td>
                     <td className="px-3 py-2 align-top">
                       Every {row.frequency_months} month
                       {row.frequency_months === 1 ? "" : "s"}
                     </td>
                     <td className="px-3 py-2 align-top">
                       {row.last_delivery_date
-                        ? new Date(`${row.last_delivery_date}T00:00:00`).toLocaleDateString()
+                        ? new Date(
+                            `${row.last_delivery_date}T00:00:00`,
+                          ).toLocaleDateString()
                         : "—"}
                     </td>
-                    <td className="px-3 py-2 align-top">{row.due_month_label}</td>
                     <td className="px-3 py-2 align-top">
-                      {new Date(`${row.create_target_date}T00:00:00`).toLocaleDateString()}
+                      {row.due_month_label}
+                    </td>
+                    <td className="px-3 py-2 align-top">
+                      {new Date(
+                        `${row.create_target_date}T00:00:00`,
+                      ).toLocaleDateString()}
                     </td>
                   </tr>
                 );

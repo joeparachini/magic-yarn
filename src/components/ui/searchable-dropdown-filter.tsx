@@ -72,13 +72,13 @@ export function SearchableDropdownFilter({
           />
           <div className="absolute top-full z-30 mt-2 w-full rounded-md border border-border bg-popover shadow-2xl ring-1 ring-border/70">
             <div className="border-b border-border bg-popover p-2">
-            <input
-              className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-              placeholder={searchPlaceholder}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              autoFocus
-            />
+              <input
+                className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                placeholder={searchPlaceholder}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                autoFocus
+              />
             </div>
             <div className="max-h-56 overflow-auto bg-popover p-1">
               <button
