@@ -4,6 +4,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { supabase } from "../lib/supabaseClient";
@@ -79,6 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const currentUserIdRef = useRef<string | null>(null);
 
   const [role, setRole] = useState<Role | null>(null);
   const [isApproved, setIsApproved] = useState(false);
@@ -108,7 +110,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const init = async () => {
       const { data } = await supabase.auth.getSession();
       if (!mounted) return;
-      setRoleLoading(Boolean(data.session?.user));
+      const nextUserId = data.session?.user?.id ?? null;
+      const userChanged = currentUserIdRef.current !== nextUserId;
+      currentUserIdRef.current = nextUserId;
+
+      if (!nextUserId) {
+        setRole(null);
+        setIsApproved(false);
+        setRoleLoading(false);
+      } else if (userChanged) {
+        setRoleLoading(true);
+      }
+
       setSession(data.session);
       setUser(data.session?.user ?? null);
       setLoading(false);
@@ -118,7 +131,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const { data: subscription } = supabase.auth.onAuthStateChange(
       (_event, newSession) => {
-        setRoleLoading(Boolean(newSession?.user));
+        const nextUserId = newSession?.user?.id ?? null;
+        const userChanged = currentUserIdRef.current !== nextUserId;
+        currentUserIdRef.current = nextUserId;
+
+        if (!nextUserId) {
+          setRole(null);
+          setIsApproved(false);
+          setRoleLoading(false);
+        } else if (userChanged) {
+          setRoleLoading(true);
+        }
+
         setSession(newSession);
         setUser(newSession?.user ?? null);
         setLoading(false);
