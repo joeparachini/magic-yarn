@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import type { Role } from "../auth/types";
 import { Button } from "../components/ui/button";
+import { SearchableDropdownFilter } from "../components/ui/searchable-dropdown-filter";
 import {
   DELIVERY_STATUS_OPTIONS,
   formatDeliveryStatusById,
@@ -121,6 +122,7 @@ export function DeliveriesList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const query = searchParams.get("q") ?? "";
+  const recipient = searchParams.get("recipient") ?? "";
   const statusParam = searchParams.get("status");
   const assignedParam = searchParams.get("assigned");
   const monthParam = searchParams.get("month") ?? "all";
@@ -203,6 +205,16 @@ export function DeliveriesList() {
     void load();
   }, []);
 
+  const recipientOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const row of rows) {
+      const name = row.recipients?.name?.trim();
+      if (name) names.add(name);
+    }
+
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [rows]);
+
   const assignedOptions = useMemo(() => {
     const byId = new Map<string, string>();
     for (const row of rows) {
@@ -240,6 +252,7 @@ export function DeliveriesList() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return rows.filter((r) => {
+      if (recipient && (r.recipients?.name ?? "") !== recipient) return false;
       if (status !== "all" && r.status_id !== status) return false;
       if (
         month !== "all" &&
@@ -253,14 +266,14 @@ export function DeliveriesList() {
         return false;
       }
       if (!q) return true;
-      const recipient = r.recipients?.name ?? "";
+      const recipientName = r.recipients?.name ?? "";
       const recipientState = r.recipients?.state ?? "";
       const chapterLeader = r.recipients?.user_profiles?.full_name ?? "";
       const haystack =
-        `${recipient} ${recipientState} ${chapterLeader} ${formatDeliveryStatusById(r.status_id)}`.toLowerCase();
+        `${recipientName} ${recipientState} ${chapterLeader} ${formatDeliveryStatusById(r.status_id)}`.toLowerCase();
       return haystack.includes(q);
     });
-  }, [rows, query, status, assigned, month]);
+  }, [rows, query, recipient, status, assigned, month]);
 
   const sorted = useMemo(() => {
     const direction = sortDir === "asc" ? 1 : -1;
@@ -397,6 +410,15 @@ export function DeliveriesList() {
       ) : null}
 
       <div className="flex flex-col gap-2 md:flex-row md:items-end">
+        <SearchableDropdownFilter
+          label="Recipient"
+          value={recipient}
+          options={recipientOptions}
+          onChange={(value) => updateSearchParam("recipient", value)}
+          allLabel="All recipients"
+          searchPlaceholder="Type to filter recipients…"
+        />
+
         <div className="flex w-full max-w-md flex-col gap-1">
           <div className="text-xs text-muted-foreground">Search</div>
           <input

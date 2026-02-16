@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthProvider";
 import type { Role } from "../auth/types";
 import { Button } from "../components/ui/button";
+import { SearchableDropdownFilter } from "../components/ui/searchable-dropdown-filter";
 import { supabase } from "../lib/supabaseClient";
 
 type PlannerRecipient = {
@@ -31,7 +32,8 @@ type DueRow = {
   recipient_name: string;
   chapter_leader: string;
   frequency_months: number;
-  last_delivery_date: string;
+  last_delivery_date: string | null;
+  is_first_delivery: boolean;
   due_month_key: string;
   due_month_label: string;
   create_target_date: string;
@@ -72,13 +74,27 @@ function toMonthKey(value: string | null): string | null {
 
 function toDateOrNull(value: string | null): Date | null {
   if (!value) return null;
+
+  const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (dateOnlyMatch) {
+    const year = Number(dateOnlyMatch[1]);
+    const monthIndex = Number(dateOnlyMatch[2]) - 1;
+    const day = Number(dateOnlyMatch[3]);
+    const parsedLocal = new Date(year, monthIndex, day);
+    if (Number.isNaN(parsedLocal.getTime())) return null;
+    return parsedLocal;
+  }
+
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return null;
   return parsed;
 }
 
 function toIsoDate(value: Date) {
-  return value.toISOString().slice(0, 10);
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function startOfMonth(value: Date) {
@@ -87,6 +103,29 @@ function startOfMonth(value: Date) {
 
 function addMonths(value: Date, months: number) {
   return new Date(value.getFullYear(), value.getMonth() + months, 1);
+}
+
+function endOfMonth(value: Date) {
+  return new Date(value.getFullYear(), value.getMonth() + 1, 0);
+}
+
+function addMonthsKeepingDay(value: Date, months: number, dayOfMonth: number) {
+  const shiftedMonthStart = new Date(
+    value.getFullYear(),
+    value.getMonth() + months,
+    1,
+  );
+  const monthEndDay = new Date(
+    shiftedMonthStart.getFullYear(),
+    shiftedMonthStart.getMonth() + 1,
+    0,
+  ).getDate();
+
+  return new Date(
+    shiftedMonthStart.getFullYear(),
+    shiftedMonthStart.getMonth(),
+    Math.min(dayOfMonth, monthEndDay),
+  );
 }
 
 function monthLabel(monthKey: string) {
@@ -110,6 +149,7 @@ export function DeliveryPlanner() {
   const canEdit = canEditDeliveries(role);
 
   const [horizonMonths, setHorizonMonths] = useState<number>(6);
+  const [recipientQuery, setRecipientQuery] = useState("");
   const [recipients, setRecipients] = useState<PlannerRecipient[]>([]);
   const [deliveries, setDeliveries] = useState<PlannerDelivery[]>([]);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
@@ -205,7 +245,7 @@ export function DeliveryPlanner() {
     }
 
     const start = startOfMonth(new Date());
-    const end = addMonths(start, horizonMonths - 1);
+    const end = endOfMonth(addMonths(start, horizonMonths - 1));
     const today = new Date();
     const rows: DueRow[] = [];
 
@@ -224,7 +264,10 @@ export function DeliveryPlanner() {
         }
       }
 
-      if (!anchor) continue;
+      const hasHistory = Boolean(anchor);
+      if (!anchor) {
+        anchor = today;
+      }
 
       const existingMonthKeys = new Set<string>();
       for (const row of history) {
@@ -232,7 +275,11 @@ export function DeliveryPlanner() {
         if (existing) existingMonthKeys.add(existing);
       }
 
-      let next = addMonths(startOfMonth(anchor), frequency);
+      const anchorDayOfMonth = anchor.getDate();
+      let isFirstDueForRecipient = true;
+      let next = hasHistory
+        ? addMonthsKeepingDay(anchor, frequency, anchorDayOfMonth)
+        : new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate());
       while (next.getTime() <= end.getTime()) {
         if (next.getTime() >= start.getTime()) {
           const dueMonthKey = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`;
@@ -244,18 +291,21 @@ export function DeliveryPlanner() {
               chapter_leader:
                 recipient.user_profiles?.full_name?.trim() || "Unassigned",
               frequency_months: frequency,
-              last_delivery_date: toIsoDate(anchor),
+              last_delivery_date: hasHistory ? toIsoDate(anchor) : null,
+              is_first_delivery: !hasHistory && isFirstDueForRecipient,
               due_month_key: dueMonthKey,
               due_month_label: monthLabel(dueMonthKey),
-              create_target_date: `${dueMonthKey}-01`,
+              create_target_date: toIsoDate(next),
               create_requested_date: toIsoDate(today),
               create_address: formatAddress(recipient),
               create_coordinator_id: recipient.assigned_user_id,
             });
+
+            isFirstDueForRecipient = false;
           }
         }
 
-        next = addMonths(next, frequency);
+        next = addMonthsKeepingDay(next, frequency, anchorDayOfMonth);
       }
     }
 
@@ -281,16 +331,29 @@ export function DeliveryPlanner() {
     });
   }, [dueRows]);
 
-  const dueKeys = useMemo(() => new Set(dueRows.map((row) => row.key)), [dueRows]);
+  const filteredDueRows = useMemo(() => {
+    if (!recipientQuery) return dueRows;
+    return dueRows.filter((row) => row.recipient_name === recipientQuery);
+  }, [dueRows, recipientQuery]);
+
+  const recipientFilterOptions = useMemo(() => {
+    const names = new Set(dueRows.map((row) => row.recipient_name));
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [dueRows]);
+
+  const filteredDueKeys = useMemo(
+    () => new Set(filteredDueRows.map((row) => row.key)),
+    [filteredDueRows],
+  );
 
   const selectedRows = useMemo(
-    () => dueRows.filter((row) => selectedKeys.has(row.key)),
-    [dueRows, selectedKeys],
+    () => filteredDueRows.filter((row) => selectedKeys.has(row.key)),
+    [filteredDueRows, selectedKeys],
   );
 
   const selectableRows = useMemo(
-    () => dueRows.filter((row) => Boolean(row.create_address)),
-    [dueRows],
+    () => filteredDueRows.filter((row) => Boolean(row.create_address)),
+    [filteredDueRows],
   );
 
   const selectableKeySet = useMemo(
@@ -308,7 +371,7 @@ export function DeliveryPlanner() {
     selectableRows.every((row) => selectedKeys.has(row.key));
 
   const toggleRow = (key: string) => {
-    if (!dueKeys.has(key)) return;
+    if (!filteredDueKeys.has(key)) return;
     setSelectedKeys((prev) => {
       const next = new Set(prev);
       if (next.has(key)) {
@@ -463,6 +526,16 @@ export function DeliveryPlanner() {
       ) : null}
 
       <div className="flex flex-col gap-2 md:flex-row md:items-end">
+        <SearchableDropdownFilter
+          label="Recipient"
+          value={recipientQuery}
+          options={recipientFilterOptions}
+          onChange={setRecipientQuery}
+          disabled={loading || creating}
+          allLabel="All recipients"
+          searchPlaceholder="Type to filter recipients…"
+        />
+
         <div className="flex w-full max-w-xs flex-col gap-1">
           <div className="text-xs text-muted-foreground">Plan horizon</div>
           <select
@@ -491,7 +564,7 @@ export function DeliveryPlanner() {
         </label>
 
         <div className="text-xs text-muted-foreground md:pb-2">
-          {dueRows.length} due • {selectedRows.length} selected
+          {filteredDueRows.length} shown • {selectedRows.length} selected
         </div>
       </div>
 
@@ -512,7 +585,7 @@ export function DeliveryPlanner() {
               </tr>
             </thead>
             <tbody>
-              {dueRows.map((row) => {
+              {filteredDueRows.map((row) => {
                 const disabled = !row.create_address || !canEdit;
 
                 return (
@@ -531,6 +604,13 @@ export function DeliveryPlanner() {
                     </td>
                     <td className="px-3 py-2 align-top">
                       <div className="font-medium">{row.recipient_name}</div>
+                      {row.is_first_delivery ? (
+                        <div className="mt-1">
+                          <span className="inline-flex rounded-md border border-chart-2/30 bg-chart-2/15 px-2 py-0.5 text-[11px] font-medium text-chart-2">
+                            First delivery
+                          </span>
+                        </div>
+                      ) : null}
                     </td>
                     <td className="px-3 py-2 align-top">{row.chapter_leader}</td>
                     <td className="px-3 py-2 align-top">
@@ -538,7 +618,9 @@ export function DeliveryPlanner() {
                       {row.frequency_months === 1 ? "" : "s"}
                     </td>
                     <td className="px-3 py-2 align-top">
-                      {new Date(`${row.last_delivery_date}T00:00:00`).toLocaleDateString()}
+                      {row.last_delivery_date
+                        ? new Date(`${row.last_delivery_date}T00:00:00`).toLocaleDateString()
+                        : "—"}
                     </td>
                     <td className="px-3 py-2 align-top">{row.due_month_label}</td>
                     <td className="px-3 py-2 align-top">
@@ -547,7 +629,7 @@ export function DeliveryPlanner() {
                   </tr>
                 );
               })}
-              {dueRows.length === 0 ? (
+              {filteredDueRows.length === 0 ? (
                 <tr>
                   <td
                     className="px-3 py-6 text-center text-sm text-muted-foreground"
