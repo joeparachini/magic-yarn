@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import type { Role } from "../auth/types";
 import { Button } from "../components/ui/button";
 import { supabase } from "../lib/supabaseClient";
@@ -17,6 +18,23 @@ type RolePermissionRow = {
   allowed: boolean;
   updated_at: string;
 };
+
+type PermissionSortKey = "label" | "permission";
+type SortDir = "asc" | "desc";
+
+const SORT_KEYS: PermissionSortKey[] = ["label", "permission"];
+
+function toSortKey(value: string | null): PermissionSortKey | null {
+  if (!value) return null;
+  if (SORT_KEYS.includes(value as PermissionSortKey)) {
+    return value as PermissionSortKey;
+  }
+  return null;
+}
+
+function toSortDir(value: string | null): SortDir {
+  return value === "desc" ? "desc" : "asc";
+}
 
 const editableRoles: Role[] = [
   "contacts_manager",
@@ -62,10 +80,13 @@ const permissions: Array<{
 ];
 
 export function AdminPermissions() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [rows, setRows] = useState<RolePermissionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
+  const sortKey = toSortKey(searchParams.get("sort"));
+  const sortDir = toSortDir(searchParams.get("dir"));
 
   const load = async () => {
     setLoading(true);
@@ -137,8 +158,41 @@ export function AdminPermissions() {
       list.push(p);
       groups.set(p.group, list);
     }
-    return Array.from(groups.entries());
-  }, []);
+    return Array.from(groups.entries()).map(([group, perms]) => {
+      const sortedPerms = !sortKey
+        ? [...perms]
+        : [...perms].sort((a, b) => {
+            const left = sortKey === "label" ? a.label : a.permission;
+            const right = sortKey === "label" ? b.label : b.permission;
+            const base = left.localeCompare(right);
+            return sortDir === "asc" ? base : base * -1;
+          });
+
+      return [group, sortedPerms] as const;
+    });
+  }, [sortDir, sortKey]);
+
+  const updateSort = (nextKey: PermissionSortKey) => {
+    const next = new URLSearchParams(searchParams);
+    const defaultDir: SortDir = "asc";
+    if (sortKey !== nextKey) {
+      next.set("sort", nextKey);
+      next.set("dir", defaultDir);
+    } else if (sortDir === "asc") {
+      next.set("sort", nextKey);
+      next.set("dir", "desc");
+    } else {
+      next.delete("sort");
+      next.delete("dir");
+    }
+
+    setSearchParams(next, { replace: true });
+  };
+
+  const sortIndicator = (key: PermissionSortKey) => {
+    if (sortKey !== key) return "";
+    return sortDir === "asc" ? " ↑" : " ↓";
+  };
 
   return (
     <div className="flex flex-col gap-4 rounded-xl border border-border/70 bg-card/70 p-4 shadow-sm">
@@ -187,7 +241,13 @@ export function AdminPermissions() {
                   <thead className="text-xs uppercase text-muted-foreground">
                     <tr className="border-b border-border">
                       <th className="px-3 py-2 text-left align-top">
-                        Permission
+                        <button
+                          type="button"
+                          className="text-left"
+                          onClick={() => updateSort("label")}
+                        >
+                          Permission{sortIndicator("label")}
+                        </button>
                       </th>
                       {editableRoles.map((r) => (
                         <th

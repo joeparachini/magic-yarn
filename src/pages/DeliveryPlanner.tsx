@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import type { Role } from "../auth/types";
 import { Button } from "../components/ui/button";
@@ -41,6 +42,35 @@ type DueRow = {
   create_address: string;
   create_coordinator_id: string | null;
 };
+
+type SortKey =
+  | "recipient"
+  | "chapter_leader"
+  | "frequency"
+  | "last_delivery"
+  | "due_month"
+  | "target_date";
+
+type SortDir = "asc" | "desc";
+
+const SORT_KEYS: SortKey[] = [
+  "recipient",
+  "chapter_leader",
+  "frequency",
+  "last_delivery",
+  "due_month",
+  "target_date",
+];
+
+function toSortKey(value: string | null): SortKey | null {
+  if (!value) return null;
+  if (SORT_KEYS.includes(value as SortKey)) return value as SortKey;
+  return null;
+}
+
+function toSortDir(value: string | null): SortDir {
+  return value === "desc" ? "desc" : "asc";
+}
 
 const HORIZON_OPTIONS = [1, 3, 6, 12] as const;
 
@@ -145,6 +175,7 @@ function deliveryAnchorDate(row: PlannerDelivery): Date | null {
 }
 
 export function DeliveryPlanner() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { role } = useAuth();
   const canEdit = canEditDeliveries(role);
 
@@ -157,6 +188,8 @@ export function DeliveryPlanner() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const sortKey = toSortKey(searchParams.get("sort"));
+  const sortDir = toSortDir(searchParams.get("dir"));
 
   const load = async () => {
     setLoading(true);
@@ -336,24 +369,60 @@ export function DeliveryPlanner() {
     return dueRows.filter((row) => row.recipient_name === recipientQuery);
   }, [dueRows, recipientQuery]);
 
+  const sortedDueRows = useMemo(() => {
+    if (!sortKey) return filteredDueRows;
+
+    const withIndex = filteredDueRows.map((row, index) => ({ row, index }));
+    const direction = sortDir === "asc" ? 1 : -1;
+
+    withIndex.sort((a, b) => {
+      const left = a.row;
+      const right = b.row;
+      let result = 0;
+
+      if (sortKey === "recipient") {
+        result = left.recipient_name.localeCompare(right.recipient_name);
+      } else if (sortKey === "chapter_leader") {
+        result = left.chapter_leader.localeCompare(right.chapter_leader);
+      } else if (sortKey === "frequency") {
+        result = left.frequency_months - right.frequency_months;
+      } else if (sortKey === "last_delivery") {
+        result = (left.last_delivery_date ?? "").localeCompare(
+          right.last_delivery_date ?? "",
+        );
+      } else if (sortKey === "due_month") {
+        result = left.due_month_key.localeCompare(right.due_month_key);
+      } else if (sortKey === "target_date") {
+        result = left.create_target_date.localeCompare(
+          right.create_target_date,
+        );
+      }
+
+      if (result === 0) return a.index - b.index;
+      return result * direction;
+    });
+
+    return withIndex.map((entry) => entry.row);
+  }, [filteredDueRows, sortDir, sortKey]);
+
   const recipientFilterOptions = useMemo(() => {
     const names = new Set(dueRows.map((row) => row.recipient_name));
     return Array.from(names).sort((a, b) => a.localeCompare(b));
   }, [dueRows]);
 
   const filteredDueKeys = useMemo(
-    () => new Set(filteredDueRows.map((row) => row.key)),
-    [filteredDueRows],
+    () => new Set(sortedDueRows.map((row) => row.key)),
+    [sortedDueRows],
   );
 
   const selectedRows = useMemo(
-    () => filteredDueRows.filter((row) => selectedKeys.has(row.key)),
-    [filteredDueRows, selectedKeys],
+    () => sortedDueRows.filter((row) => selectedKeys.has(row.key)),
+    [sortedDueRows, selectedKeys],
   );
 
   const selectableRows = useMemo(
-    () => filteredDueRows.filter((row) => Boolean(row.create_address)),
-    [filteredDueRows],
+    () => sortedDueRows.filter((row) => Boolean(row.create_address)),
+    [sortedDueRows],
   );
 
   const selectableKeySet = useMemo(
@@ -369,6 +438,28 @@ export function DeliveryPlanner() {
   const allSelectableSelected =
     selectableRows.length > 0 &&
     selectableRows.every((row) => selectedKeys.has(row.key));
+
+  const updateSort = (nextKey: SortKey) => {
+    const next = new URLSearchParams(searchParams);
+    const defaultDir: SortDir = "asc";
+    if (sortKey !== nextKey) {
+      next.set("sort", nextKey);
+      next.set("dir", defaultDir);
+    } else if (sortDir === "asc") {
+      next.set("sort", nextKey);
+      next.set("dir", "desc");
+    } else {
+      next.delete("sort");
+      next.delete("dir");
+    }
+
+    setSearchParams(next, { replace: true });
+  };
+
+  const sortIndicator = (key: SortKey) => {
+    if (sortKey !== key) return "";
+    return sortDir === "asc" ? " ↑" : " ↓";
+  };
 
   const toggleRow = (key: string) => {
     if (!filteredDueKeys.has(key)) return;
@@ -575,7 +666,7 @@ export function DeliveryPlanner() {
         </label>
 
         <div className="text-xs text-muted-foreground md:pb-2">
-          {filteredDueRows.length} shown • {selectedRows.length} selected
+          {sortedDueRows.length} shown • {selectedRows.length} selected
         </div>
       </div>
 
@@ -587,16 +678,64 @@ export function DeliveryPlanner() {
             <thead className="bg-muted/35 text-xs uppercase text-muted-foreground">
               <tr>
                 <th className="px-3 py-2">Select</th>
-                <th className="px-3 py-2">Recipient</th>
-                <th className="px-3 py-2">Chapter leader</th>
-                <th className="px-3 py-2">Frequency</th>
-                <th className="px-3 py-2">Last delivery</th>
-                <th className="px-3 py-2">Due month</th>
-                <th className="px-3 py-2">Target date</th>
+                <th className="px-3 py-2">
+                  <button
+                    type="button"
+                    className="text-left"
+                    onClick={() => updateSort("recipient")}
+                  >
+                    Recipient{sortIndicator("recipient")}
+                  </button>
+                </th>
+                <th className="px-3 py-2">
+                  <button
+                    type="button"
+                    className="text-left"
+                    onClick={() => updateSort("chapter_leader")}
+                  >
+                    Chapter leader{sortIndicator("chapter_leader")}
+                  </button>
+                </th>
+                <th className="px-3 py-2">
+                  <button
+                    type="button"
+                    className="text-left"
+                    onClick={() => updateSort("frequency")}
+                  >
+                    Frequency{sortIndicator("frequency")}
+                  </button>
+                </th>
+                <th className="px-3 py-2">
+                  <button
+                    type="button"
+                    className="text-left"
+                    onClick={() => updateSort("last_delivery")}
+                  >
+                    Last delivery{sortIndicator("last_delivery")}
+                  </button>
+                </th>
+                <th className="px-3 py-2">
+                  <button
+                    type="button"
+                    className="text-left"
+                    onClick={() => updateSort("due_month")}
+                  >
+                    Due month{sortIndicator("due_month")}
+                  </button>
+                </th>
+                <th className="px-3 py-2">
+                  <button
+                    type="button"
+                    className="text-left"
+                    onClick={() => updateSort("target_date")}
+                  >
+                    Target date{sortIndicator("target_date")}
+                  </button>
+                </th>
               </tr>
             </thead>
             <tbody>
-              {filteredDueRows.map((row) => {
+              {sortedDueRows.map((row) => {
                 const disabled = !row.create_address || !canEdit;
 
                 return (
@@ -648,7 +787,7 @@ export function DeliveryPlanner() {
                   </tr>
                 );
               })}
-              {filteredDueRows.length === 0 ? (
+              {sortedDueRows.length === 0 ? (
                 <tr>
                   <td
                     className="px-3 py-6 text-center text-sm text-muted-foreground"

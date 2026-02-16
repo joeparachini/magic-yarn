@@ -1,5 +1,11 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import {
+  Link,
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import type { Role } from "../auth/types";
 import { Button } from "../components/ui/button";
@@ -38,6 +44,57 @@ type CorrespondenceEntryRow = {
   note: string;
   created_at: string;
 };
+
+type AssociatedSortKey =
+  | "requested"
+  | "target"
+  | "status"
+  | "shipped"
+  | "items"
+  | "contact"
+  | "coordinator";
+
+type CorrespondenceSortKey = "date" | "note" | "logged";
+
+type SortDir = "asc" | "desc";
+
+const ASSOCIATED_SORT_KEYS: AssociatedSortKey[] = [
+  "requested",
+  "target",
+  "status",
+  "shipped",
+  "items",
+  "contact",
+  "coordinator",
+];
+
+const CORRESPONDENCE_SORT_KEYS: CorrespondenceSortKey[] = [
+  "date",
+  "note",
+  "logged",
+];
+
+function toAssociatedSortKey(value: string | null): AssociatedSortKey | null {
+  if (!value) return null;
+  if (ASSOCIATED_SORT_KEYS.includes(value as AssociatedSortKey)) {
+    return value as AssociatedSortKey;
+  }
+  return null;
+}
+
+function toCorrespondenceSortKey(
+  value: string | null,
+): CorrespondenceSortKey | null {
+  if (!value) return null;
+  if (CORRESPONDENCE_SORT_KEYS.includes(value as CorrespondenceSortKey)) {
+    return value as CorrespondenceSortKey;
+  }
+  return null;
+}
+
+function toSortDir(value: string | null): SortDir {
+  return value === "asc" ? "asc" : "desc";
+}
 
 type RecipientType =
   | "hospital"
@@ -127,6 +184,7 @@ function statusClassName(statusId: DeliveryStatusId | null) {
 }
 
 export function RecipientEdit() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { id } = useParams();
   const isNew = !id;
   const navigate = useNavigate();
@@ -168,6 +226,12 @@ export function RecipientEdit() {
     new Date().toISOString().slice(0, 10),
   );
   const [newCorrespondenceNote, setNewCorrespondenceNote] = useState("");
+  const associatedSortKey = toAssociatedSortKey(searchParams.get("dsort"));
+  const associatedSortDir = toSortDir(searchParams.get("ddir"));
+  const correspondenceSortKey = toCorrespondenceSortKey(
+    searchParams.get("csort"),
+  );
+  const correspondenceSortDir = toSortDir(searchParams.get("cdir"));
 
   const title = useMemo(
     () => (isNew ? "New recipient" : "Edit recipient"),
@@ -353,6 +417,164 @@ export function RecipientEdit() {
 
   const update = (patch: Partial<RecipientFormState>) =>
     setForm((prev) => ({ ...prev, ...patch }));
+
+  const sortedCorrespondenceRows = useMemo(() => {
+    if (!correspondenceSortKey) return correspondenceRows;
+
+    const withIndex = correspondenceRows.map((row, index) => ({ row, index }));
+    const direction = correspondenceSortDir === "asc" ? 1 : -1;
+
+    withIndex.sort((a, b) => {
+      const left = a.row;
+      const right = b.row;
+      let result = 0;
+
+      if (correspondenceSortKey === "date") {
+        result = left.correspondence_date.localeCompare(
+          right.correspondence_date,
+        );
+      } else if (correspondenceSortKey === "note") {
+        result = left.note.localeCompare(right.note);
+      } else if (correspondenceSortKey === "logged") {
+        result = left.created_at.localeCompare(right.created_at);
+      }
+
+      if (result === 0) return a.index - b.index;
+      return result * direction;
+    });
+
+    return withIndex.map((entry) => entry.row);
+  }, [correspondenceRows, correspondenceSortDir, correspondenceSortKey]);
+
+  const sortedAssociatedDeliveries = useMemo(() => {
+    if (!associatedSortKey) return associatedDeliveries;
+
+    const withIndex = associatedDeliveries.map((row, index) => ({
+      row,
+      index,
+    }));
+    const direction = associatedSortDir === "asc" ? 1 : -1;
+
+    withIndex.sort((a, b) => {
+      const left = a.row;
+      const right = b.row;
+      let result = 0;
+
+      if (associatedSortKey === "requested") {
+        result = (left.requested_date ?? "").localeCompare(
+          right.requested_date ?? "",
+        );
+      } else if (associatedSortKey === "target") {
+        result = (left.target_delivery_date ?? "").localeCompare(
+          right.target_delivery_date ?? "",
+        );
+      } else if (associatedSortKey === "status") {
+        result = formatDeliveryStatusById(left.status_id).localeCompare(
+          formatDeliveryStatusById(right.status_id),
+        );
+      } else if (associatedSortKey === "shipped") {
+        result = (left.shipped_date ?? "").localeCompare(
+          right.shipped_date ?? "",
+        );
+      } else if (associatedSortKey === "items") {
+        result =
+          Number(left.wigs ?? 0) +
+          Number(left.beanies ?? 0) -
+          (Number(right.wigs ?? 0) + Number(right.beanies ?? 0));
+      } else if (associatedSortKey === "contact") {
+        const leftContact =
+          left.recipient_contact_slot === "primary"
+            ? [
+                left.recipients?.primary_contact_last_name,
+                left.recipients?.primary_contact_first_name,
+              ]
+                .filter(Boolean)
+                .join(", ") || "Primary"
+            : left.recipient_contact_slot === "secondary"
+              ? [
+                  left.recipients?.secondary_contact_last_name,
+                  left.recipients?.secondary_contact_first_name,
+                ]
+                  .filter(Boolean)
+                  .join(", ") || "Secondary"
+              : "";
+        const rightContact =
+          right.recipient_contact_slot === "primary"
+            ? [
+                right.recipients?.primary_contact_last_name,
+                right.recipients?.primary_contact_first_name,
+              ]
+                .filter(Boolean)
+                .join(", ") || "Primary"
+            : right.recipient_contact_slot === "secondary"
+              ? [
+                  right.recipients?.secondary_contact_last_name,
+                  right.recipients?.secondary_contact_first_name,
+                ]
+                  .filter(Boolean)
+                  .join(", ") || "Secondary"
+              : "";
+        result = leftContact.localeCompare(rightContact);
+      } else if (associatedSortKey === "coordinator") {
+        result = (left.user_profiles?.full_name ?? "").localeCompare(
+          right.user_profiles?.full_name ?? "",
+        );
+      }
+
+      if (result === 0) return a.index - b.index;
+      return result * direction;
+    });
+
+    return withIndex.map((entry) => entry.row);
+  }, [associatedDeliveries, associatedSortDir, associatedSortKey]);
+
+  const updateAssociatedSort = (nextKey: AssociatedSortKey) => {
+    const next = new URLSearchParams(searchParams);
+    const defaultDir: SortDir =
+      nextKey === "requested" || nextKey === "target" || nextKey === "shipped"
+        ? "desc"
+        : "asc";
+    if (associatedSortKey !== nextKey) {
+      next.set("dsort", nextKey);
+      next.set("ddir", defaultDir);
+    } else if (associatedSortDir === "asc") {
+      next.set("dsort", nextKey);
+      next.set("ddir", "desc");
+    } else {
+      next.delete("dsort");
+      next.delete("ddir");
+    }
+
+    setSearchParams(next, { replace: true });
+  };
+
+  const updateCorrespondenceSort = (nextKey: CorrespondenceSortKey) => {
+    const next = new URLSearchParams(searchParams);
+    const defaultDir: SortDir =
+      nextKey === "date" || nextKey === "logged" ? "desc" : "asc";
+    if (correspondenceSortKey !== nextKey) {
+      next.set("csort", nextKey);
+      next.set("cdir", defaultDir);
+    } else if (correspondenceSortDir === "asc") {
+      next.set("csort", nextKey);
+      next.set("cdir", "desc");
+    } else {
+      next.delete("csort");
+      next.delete("cdir");
+    }
+
+    setSearchParams(next, { replace: true });
+  };
+
+  const associatedSortIndicator = (key: AssociatedSortKey) => {
+    if (associatedSortKey !== key) return "";
+    return associatedSortDir === "asc" ? " ↑" : " ↓";
+  };
+
+  const correspondenceSortIndicator = (key: CorrespondenceSortKey) => {
+    if (correspondenceSortKey !== key) return "";
+    return correspondenceSortDir === "asc" ? " ↑" : " ↓";
+  };
 
   const save = async () => {
     if (!canEdit) {
@@ -940,13 +1162,39 @@ export function RecipientEdit() {
                       <table className="min-w-full text-left text-sm">
                         <thead className="bg-muted/35 text-xs uppercase text-muted-foreground">
                           <tr>
-                            <th className="px-3 py-2">Date</th>
-                            <th className="px-3 py-2">Note</th>
-                            <th className="px-3 py-2">Logged</th>
+                            <th className="px-3 py-2">
+                              <button
+                                type="button"
+                                className="text-left"
+                                onClick={() => updateCorrespondenceSort("date")}
+                              >
+                                Date{correspondenceSortIndicator("date")}
+                              </button>
+                            </th>
+                            <th className="px-3 py-2">
+                              <button
+                                type="button"
+                                className="text-left"
+                                onClick={() => updateCorrespondenceSort("note")}
+                              >
+                                Note{correspondenceSortIndicator("note")}
+                              </button>
+                            </th>
+                            <th className="px-3 py-2">
+                              <button
+                                type="button"
+                                className="text-left"
+                                onClick={() =>
+                                  updateCorrespondenceSort("logged")
+                                }
+                              >
+                                Logged{correspondenceSortIndicator("logged")}
+                              </button>
+                            </th>
                           </tr>
                         </thead>
                         <tbody>
-                          {correspondenceRows.map((entry) => (
+                          {sortedCorrespondenceRows.map((entry) => (
                             <tr
                               key={entry.id}
                               className="border-t border-border/80 hover:bg-muted/20"
@@ -964,7 +1212,7 @@ export function RecipientEdit() {
                               </td>
                             </tr>
                           ))}
-                          {correspondenceRows.length === 0 ? (
+                          {sortedCorrespondenceRows.length === 0 ? (
                             <tr>
                               <td
                                 className="px-3 py-6 text-center text-sm text-muted-foreground"
@@ -1020,22 +1268,76 @@ export function RecipientEdit() {
                 <table className="min-w-full text-left text-sm">
                   <thead className="bg-muted/35 text-xs uppercase text-muted-foreground">
                     <tr>
-                      <th className="px-3 py-2">Requested on</th>
-                      <th className="px-3 py-2">Target date</th>
-                      <th className="px-3 py-2">Status</th>
-                      <th className="px-3 py-2">Shipped date</th>
                       <th className="px-3 py-2">
-                        <div>Items</div>
+                        <button
+                          type="button"
+                          className="text-left"
+                          onClick={() => updateAssociatedSort("requested")}
+                        >
+                          Requested on{associatedSortIndicator("requested")}
+                        </button>
+                      </th>
+                      <th className="px-3 py-2">
+                        <button
+                          type="button"
+                          className="text-left"
+                          onClick={() => updateAssociatedSort("target")}
+                        >
+                          Target date{associatedSortIndicator("target")}
+                        </button>
+                      </th>
+                      <th className="px-3 py-2">
+                        <button
+                          type="button"
+                          className="text-left"
+                          onClick={() => updateAssociatedSort("status")}
+                        >
+                          Status{associatedSortIndicator("status")}
+                        </button>
+                      </th>
+                      <th className="px-3 py-2">
+                        <button
+                          type="button"
+                          className="text-left"
+                          onClick={() => updateAssociatedSort("shipped")}
+                        >
+                          Shipped date{associatedSortIndicator("shipped")}
+                        </button>
+                      </th>
+                      <th className="px-3 py-2">
+                        <button
+                          type="button"
+                          className="text-left"
+                          onClick={() => updateAssociatedSort("items")}
+                        >
+                          <div>Items{associatedSortIndicator("items")}</div>
+                        </button>
                         <div className="text-[10px] font-normal normal-case text-muted-foreground">
                           W | B | T
                         </div>
                       </th>
-                      <th className="px-3 py-2">Contact</th>
-                      <th className="px-3 py-2">Coordinator</th>
+                      <th className="px-3 py-2">
+                        <button
+                          type="button"
+                          className="text-left"
+                          onClick={() => updateAssociatedSort("contact")}
+                        >
+                          Contact{associatedSortIndicator("contact")}
+                        </button>
+                      </th>
+                      <th className="px-3 py-2">
+                        <button
+                          type="button"
+                          className="text-left"
+                          onClick={() => updateAssociatedSort("coordinator")}
+                        >
+                          Coordinator{associatedSortIndicator("coordinator")}
+                        </button>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {associatedDeliveries.map((d) => (
+                    {sortedAssociatedDeliveries.map((d) => (
                       <Fragment key={d.id}>
                         <tr className="border-t border-border/80 hover:bg-muted/20">
                           <td className="px-3 py-2">
@@ -1120,7 +1422,7 @@ export function RecipientEdit() {
                         ) : null}
                       </Fragment>
                     ))}
-                    {associatedDeliveries.length === 0 ? (
+                    {sortedAssociatedDeliveries.length === 0 ? (
                       <tr>
                         <td
                           className="px-3 py-6 text-center text-sm text-muted-foreground"

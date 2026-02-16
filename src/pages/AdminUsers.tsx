@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import type { Role } from "../auth/types";
 import { Button } from "../components/ui/button";
@@ -25,6 +26,21 @@ type UserRegionRow = {
   region_code: string;
 };
 
+type SortKey = "name" | "email" | "role" | "approved" | "regions";
+type SortDir = "asc" | "desc";
+
+const SORT_KEYS: SortKey[] = ["name", "email", "role", "approved", "regions"];
+
+function toSortKey(value: string | null): SortKey | null {
+  if (!value) return null;
+  if (SORT_KEYS.includes(value as SortKey)) return value as SortKey;
+  return null;
+}
+
+function toSortDir(value: string | null): SortDir {
+  return value === "desc" ? "desc" : "asc";
+}
+
 const roles: Role[] = [
   "admin",
   "contacts_manager",
@@ -33,6 +49,7 @@ const roles: Role[] = [
 ];
 
 export function AdminUsers() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [rows, setRows] = useState<UserProfileRow[]>([]);
   const [regions, setRegions] = useState<RegionRow[]>([]);
   const [regionsByUserId, setRegionsByUserId] = useState<
@@ -42,6 +59,8 @@ export function AdminUsers() {
   const [error, setError] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const sortKey = toSortKey(searchParams.get("sort"));
+  const sortDir = toSortDir(searchParams.get("dir"));
 
   const load = async () => {
     setLoading(true);
@@ -104,6 +123,60 @@ export function AdminUsers() {
       return haystack.includes(q);
     });
   }, [query, rows]);
+
+  const sorted = useMemo(() => {
+    if (!sortKey) return filtered;
+
+    const withIndex = filtered.map((row, index) => ({ row, index }));
+    const direction = sortDir === "asc" ? 1 : -1;
+
+    withIndex.sort((a, b) => {
+      const left = a.row;
+      const right = b.row;
+
+      let result = 0;
+      if (sortKey === "name") {
+        result = (left.full_name ?? "").localeCompare(right.full_name ?? "");
+      } else if (sortKey === "email") {
+        result = (left.email ?? "").localeCompare(right.email ?? "");
+      } else if (sortKey === "role") {
+        result = left.role.localeCompare(right.role);
+      } else if (sortKey === "approved") {
+        result = Number(left.is_approved) - Number(right.is_approved);
+      } else if (sortKey === "regions") {
+        result =
+          (regionsByUserId[left.id]?.length ?? 0) -
+          (regionsByUserId[right.id]?.length ?? 0);
+      }
+
+      if (result === 0) return a.index - b.index;
+      return result * direction;
+    });
+
+    return withIndex.map((entry) => entry.row);
+  }, [filtered, regionsByUserId, sortDir, sortKey]);
+
+  const updateSort = (nextKey: SortKey) => {
+    const next = new URLSearchParams(searchParams);
+    const defaultDir: SortDir = nextKey === "approved" ? "desc" : "asc";
+    if (sortKey !== nextKey) {
+      next.set("sort", nextKey);
+      next.set("dir", defaultDir);
+    } else if (sortDir === "asc") {
+      next.set("sort", nextKey);
+      next.set("dir", "desc");
+    } else {
+      next.delete("sort");
+      next.delete("dir");
+    }
+
+    setSearchParams(next, { replace: true });
+  };
+
+  const sortIndicator = (key: SortKey) => {
+    if (sortKey !== key) return "";
+    return sortDir === "asc" ? " ↑" : " ↓";
+  };
 
   const initials = (row: UserProfileRow) => {
     const source = (row.full_name ?? row.email ?? "").trim();
@@ -216,7 +289,7 @@ export function AdminUsers() {
           Refresh
         </Button>
         <div className="text-xs text-muted-foreground">
-          {filtered.length} shown
+          {sorted.length} shown
         </div>
       </div>
 
@@ -227,16 +300,56 @@ export function AdminUsers() {
           <table className="min-w-full text-left text-sm">
             <thead className="bg-muted/35 text-xs uppercase text-muted-foreground">
               <tr>
-                <th className="px-3 py-2">Name</th>
-                <th className="px-3 py-2">Email</th>
-                <th className="px-3 py-2">Role</th>
-                <th className="px-3 py-2">Approved</th>
-                <th className="px-3 py-2">Regions</th>
+                <th className="px-3 py-2">
+                  <button
+                    type="button"
+                    className="text-left"
+                    onClick={() => updateSort("name")}
+                  >
+                    Name{sortIndicator("name")}
+                  </button>
+                </th>
+                <th className="px-3 py-2">
+                  <button
+                    type="button"
+                    className="text-left"
+                    onClick={() => updateSort("email")}
+                  >
+                    Email{sortIndicator("email")}
+                  </button>
+                </th>
+                <th className="px-3 py-2">
+                  <button
+                    type="button"
+                    className="text-left"
+                    onClick={() => updateSort("role")}
+                  >
+                    Role{sortIndicator("role")}
+                  </button>
+                </th>
+                <th className="px-3 py-2">
+                  <button
+                    type="button"
+                    className="text-left"
+                    onClick={() => updateSort("approved")}
+                  >
+                    Approved{sortIndicator("approved")}
+                  </button>
+                </th>
+                <th className="px-3 py-2">
+                  <button
+                    type="button"
+                    className="text-left"
+                    onClick={() => updateSort("regions")}
+                  >
+                    Regions{sortIndicator("regions")}
+                  </button>
+                </th>
                 <th className="px-3 py-2"></th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((r) => (
+              {sorted.map((r) => (
                 <tr
                   key={r.id}
                   className="border-t border-border/80 hover:bg-muted/20"
@@ -334,7 +447,7 @@ export function AdminUsers() {
                   </td>
                 </tr>
               ))}
-              {filtered.length === 0 ? (
+              {sorted.length === 0 ? (
                 <tr>
                   <td
                     className="px-3 py-6 text-center text-sm text-muted-foreground"

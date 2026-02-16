@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import {
+  Link,
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import type { Role } from "../auth/types";
 import { Button } from "../components/ui/button";
@@ -25,6 +31,35 @@ type AssociatedDeliveryRow = {
   } | null;
   user_profiles?: { full_name: string | null } | null;
 };
+
+type AssociatedSortKey =
+  | "target_delivery"
+  | "status"
+  | "contact"
+  | "coordinator"
+  | "updated";
+
+type SortDir = "asc" | "desc";
+
+const ASSOCIATED_SORT_KEYS: AssociatedSortKey[] = [
+  "target_delivery",
+  "status",
+  "contact",
+  "coordinator",
+  "updated",
+];
+
+function toAssociatedSortKey(value: string | null): AssociatedSortKey | null {
+  if (!value) return null;
+  if (ASSOCIATED_SORT_KEYS.includes(value as AssociatedSortKey)) {
+    return value as AssociatedSortKey;
+  }
+  return null;
+}
+
+function toSortDir(value: string | null): SortDir {
+  return value === "asc" ? "asc" : "desc";
+}
 
 type RecipientType = "hospital" | "clinic" | "cancer_center" | "other";
 
@@ -100,6 +135,7 @@ function canEditDeliveries(role: Role | null) {
 }
 
 export function RecipientEdit() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { id } = useParams();
   const isNew = !id;
   const navigate = useNavigate();
@@ -126,6 +162,8 @@ export function RecipientEdit() {
   const [associatedDeliveriesError, setAssociatedDeliveriesError] = useState<
     string | null
   >(null);
+  const associatedSortKey = toAssociatedSortKey(searchParams.get("asort"));
+  const associatedSortDir = toSortDir(searchParams.get("adir"));
 
   const title = useMemo(
     () => (isNew ? "New recipient" : "Edit recipient"),
@@ -274,6 +312,100 @@ export function RecipientEdit() {
 
   const update = (patch: Partial<RecipientFormState>) =>
     setForm((prev) => ({ ...prev, ...patch }));
+
+  const sortedAssociatedDeliveries = useMemo(() => {
+    if (!associatedSortKey) return associatedDeliveries;
+
+    const withIndex = associatedDeliveries.map((row, index) => ({
+      row,
+      index,
+    }));
+    const direction = associatedSortDir === "asc" ? 1 : -1;
+
+    withIndex.sort((a, b) => {
+      const left = a.row;
+      const right = b.row;
+      let result = 0;
+
+      if (associatedSortKey === "target_delivery") {
+        result = (left.target_delivery_date ?? "").localeCompare(
+          right.target_delivery_date ?? "",
+        );
+      } else if (associatedSortKey === "status") {
+        result = formatDeliveryStatusById(left.status_id).localeCompare(
+          formatDeliveryStatusById(right.status_id),
+        );
+      } else if (associatedSortKey === "contact") {
+        const leftContact =
+          left.recipient_contact_slot === "primary"
+            ? [
+                left.recipients?.primary_contact_last_name,
+                left.recipients?.primary_contact_first_name,
+              ]
+                .filter(Boolean)
+                .join(", ") || "Primary"
+            : left.recipient_contact_slot === "secondary"
+              ? [
+                  left.recipients?.secondary_contact_last_name,
+                  left.recipients?.secondary_contact_first_name,
+                ]
+                  .filter(Boolean)
+                  .join(", ") || "Secondary"
+              : "";
+        const rightContact =
+          right.recipient_contact_slot === "primary"
+            ? [
+                right.recipients?.primary_contact_last_name,
+                right.recipients?.primary_contact_first_name,
+              ]
+                .filter(Boolean)
+                .join(", ") || "Primary"
+            : right.recipient_contact_slot === "secondary"
+              ? [
+                  right.recipients?.secondary_contact_last_name,
+                  right.recipients?.secondary_contact_first_name,
+                ]
+                  .filter(Boolean)
+                  .join(", ") || "Secondary"
+              : "";
+        result = leftContact.localeCompare(rightContact);
+      } else if (associatedSortKey === "coordinator") {
+        result = (left.user_profiles?.full_name ?? "").localeCompare(
+          right.user_profiles?.full_name ?? "",
+        );
+      } else if (associatedSortKey === "updated") {
+        result = left.updated_at.localeCompare(right.updated_at);
+      }
+
+      if (result === 0) return a.index - b.index;
+      return result * direction;
+    });
+
+    return withIndex.map((entry) => entry.row);
+  }, [associatedDeliveries, associatedSortDir, associatedSortKey]);
+
+  const updateAssociatedSort = (nextKey: AssociatedSortKey) => {
+    const next = new URLSearchParams(searchParams);
+    const defaultDir: SortDir =
+      nextKey === "target_delivery" || nextKey === "updated" ? "desc" : "asc";
+    if (associatedSortKey !== nextKey) {
+      next.set("asort", nextKey);
+      next.set("adir", defaultDir);
+    } else if (associatedSortDir === "asc") {
+      next.set("asort", nextKey);
+      next.set("adir", "desc");
+    } else {
+      next.delete("asort");
+      next.delete("adir");
+    }
+
+    setSearchParams(next, { replace: true });
+  };
+
+  const associatedSortIndicator = (key: AssociatedSortKey) => {
+    if (associatedSortKey !== key) return "";
+    return associatedSortDir === "asc" ? " ↑" : " ↓";
+  };
 
   const save = async () => {
     if (!canEdit) {
@@ -767,15 +899,58 @@ export function RecipientEdit() {
                 <table className="min-w-full text-left text-sm">
                   <thead className="bg-muted/35 text-xs uppercase text-muted-foreground">
                     <tr>
-                      <th className="px-3 py-2">Target delivery</th>
-                      <th className="px-3 py-2">Status</th>
-                      <th className="px-3 py-2">Contact</th>
-                      <th className="px-3 py-2">Coordinator</th>
-                      <th className="px-3 py-2">Updated</th>
+                      <th className="px-3 py-2">
+                        <button
+                          type="button"
+                          className="text-left"
+                          onClick={() =>
+                            updateAssociatedSort("target_delivery")
+                          }
+                        >
+                          Target delivery
+                          {associatedSortIndicator("target_delivery")}
+                        </button>
+                      </th>
+                      <th className="px-3 py-2">
+                        <button
+                          type="button"
+                          className="text-left"
+                          onClick={() => updateAssociatedSort("status")}
+                        >
+                          Status{associatedSortIndicator("status")}
+                        </button>
+                      </th>
+                      <th className="px-3 py-2">
+                        <button
+                          type="button"
+                          className="text-left"
+                          onClick={() => updateAssociatedSort("contact")}
+                        >
+                          Contact{associatedSortIndicator("contact")}
+                        </button>
+                      </th>
+                      <th className="px-3 py-2">
+                        <button
+                          type="button"
+                          className="text-left"
+                          onClick={() => updateAssociatedSort("coordinator")}
+                        >
+                          Coordinator{associatedSortIndicator("coordinator")}
+                        </button>
+                      </th>
+                      <th className="px-3 py-2">
+                        <button
+                          type="button"
+                          className="text-left"
+                          onClick={() => updateAssociatedSort("updated")}
+                        >
+                          Updated{associatedSortIndicator("updated")}
+                        </button>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {associatedDeliveries.map((d) => (
+                    {sortedAssociatedDeliveries.map((d) => (
                       <tr
                         key={d.id}
                         className="border-t border-border/80 hover:bg-muted/20"
@@ -820,7 +995,7 @@ export function RecipientEdit() {
                         </td>
                       </tr>
                     ))}
-                    {associatedDeliveries.length === 0 ? (
+                    {sortedAssociatedDeliveries.length === 0 ? (
                       <tr>
                         <td
                           className="px-3 py-6 text-center text-sm text-muted-foreground"
